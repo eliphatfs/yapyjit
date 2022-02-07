@@ -147,7 +147,7 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> body_stmts;
 		virtual int emit_ir(Function& appender) {
 			for (size_t i = 0; i < args.size(); i++) {
-				appender.locals[args[i]] = (int)i;
+				appender.locals[args[i]] = (int)i + 1;
 			}
 			for (auto& stmt : body_stmts) {
 				stmt->emit_ir(appender);
