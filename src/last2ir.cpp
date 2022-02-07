@@ -4,22 +4,63 @@
 #include <Python.h>
 #include <Python-ast.h>
 #include <ir.h>
-#ifdef _MSC_VER
-#pragma warning (disable: 26812)
-#endif
 
 namespace yapyjit {
-
+	int new_temp_var(Function& appender) {
+		for (int i = (int)appender.locals.size();; i++) {
+			const auto insert_res = appender.locals.insert(
+				{ "_yapyjit_loc_" + std::to_string(i), (int)appender.locals.size() + 1 }
+			);
+			if (insert_res.second) {
+				return insert_res.first->second;
+			}
+		}
+	}
 	// Returns variable id to store result of expr
 	int expr_ir(Function& appender, expr_ty expr) {
 		switch (expr->kind)
 		{
+		case BinOp_kind: {
+			int result = new_temp_var(appender);
+			appender.instructions.push_back(std::make_unique<BinOpIns>(
+				result,
+				Op2ary::_from_integral(expr->v.BinOp.op),
+				expr_ir(appender, expr->v.BinOp.left),
+				expr_ir(appender, expr->v.BinOp.right)
+			));
+			return result;
+		}
+		case UnaryOp_kind: {
+			int result = new_temp_var(appender);
+			appender.instructions.push_back(std::make_unique<UnaryOpIns>(
+				result,
+				Op1ary::_from_integral(expr->v.UnaryOp.op),
+				expr_ir(appender, expr->v.UnaryOp.operand)
+			));
+			return result;
+		}
+		case Name_kind: {
+			auto it = appender.locals.find(PyUnicode_AsUTF8(expr->v.Name.id));
+			if (it == appender.locals.end())
+				throw std::invalid_argument(
+					std::string(__FUNCTION__" possibly uninitialized local ")
+					+ PyUnicode_AsUTF8(expr->v.Name.id)
+				);
+			return it->second;
+		}
+		case Constant_kind: {
+			int result = new_temp_var(appender);
+			appender.instructions.push_back(std::make_unique<ConstantIns>(
+				result,
+				expr->v.Constant.value
+			));
+			return result;
+		}
 		default:
 			throw std::invalid_argument(
 				std::string(__FUNCTION__" got unsupported expression with kind ")
 				+ std::to_string(expr->kind)
 			);
-			break;
 		}
 	}
 
@@ -71,7 +112,6 @@ namespace yapyjit {
 				std::string(__FUNCTION__" got unsupported statement with kind ")
 				+ std::to_string(stmt->kind)
 			);
-			break;
 		}
 	}
 
