@@ -25,6 +25,14 @@ namespace yapyjit {
 		ReturnIns(int _local_id) : local_id(_local_id) {}
 	};
 
+	class MoveIns : public Instruction {
+	public:
+		int dst_local_id;
+		int src_local_id;
+		MoveIns(int _dst_local_id, int _src_local_id)
+			: dst_local_id(_dst_local_id), src_local_id(_src_local_id) {}
+	};
+
 	class Function {
 	public:
 		std::string name;
