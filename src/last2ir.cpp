@@ -28,7 +28,7 @@ namespace yapyjit {
 				std::make_pair(varname, appender.locals.size() + 1)
 			).first;
 		}
-		appender.instructions.push_back(std::make_unique<MoveIns>(*vid, src));
+		appender.instructions.push_back(std::make_unique<MoveIns>(vid->second, src));
 	}
 
 	void stmt_ir(Function& appender, stmt_ty stmt) {
