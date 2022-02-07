@@ -20,11 +20,13 @@ setuptools.setup(
         "yapyjit",
         glob.glob("src/**/*.c", recursive=True)
         + glob.glob("src/**/*.cpp", recursive=True),
+        extra_compile_args=['/DEBUG', '/Z7'],
+        extra_link_args=['/DEBUG']
     )],
     include_dirs=["include"],
     classifiers=[
         "Programming Language :: Python :: 3 :: Only",
         "License :: OSI Approved :: Apache Software License"
     ],
-    python_requires='~=3.6'
+    python_requires='~=3.7'
 )
