@@ -12,6 +12,15 @@ namespace yapyjit {
 
 	// Returns variable id to store result of expr
 	int expr_ir(Function& appender, expr_ty expr) {
+		switch (expr->kind)
+		{
+		default:
+			throw std::invalid_argument(
+				std::string(__FUNCTION__" got unsupported expression with kind ")
+				+ std::to_string(expr->kind)
+			);
+			break;
+		}
 	}
 
 	void assn_ir(Function& appender, expr_ty dst, int src) {
@@ -22,12 +31,9 @@ namespace yapyjit {
 				+ std::to_string(dst->kind)
 			);
 		std::string varname = PyUnicode_AsUTF8(dst->v.Name.id);
-		auto vid = appender.locals.find(varname);
-		if (vid == appender.locals.end()) {
-			vid = appender.locals.insert(
-				std::make_pair(varname, appender.locals.size() + 1)
-			).first;
-		}
+		const auto vid = appender.locals.insert(
+			{ varname, (int)appender.locals.size() + 1 }
+		).first;  // second is success
 		appender.instructions.push_back(std::make_unique<MoveIns>(vid->second, src));
 	}
 
