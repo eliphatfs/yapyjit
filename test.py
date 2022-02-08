@@ -30,8 +30,8 @@ def sum1n(n):
     i = 1
     s = 0
     while i:
-        s = s + i
-        i = i + 1
+        s += i
+        i += 1
         if i > n:
             break
     else:

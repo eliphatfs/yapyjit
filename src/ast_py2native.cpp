@@ -133,6 +133,25 @@ namespace yapyjit {
 				std::vector<std::unique_ptr<AST>>{}
 			);
 		}
+		TARGET(AugAssign) {
+			// FIXME: correct implementation
+			// Currently a poly-fill: a @= b -> a = a @ b
+			// But in some cases results will differ
+			// Performance may differ as well such as [list] += [short list]
+			Op2ary op = Op2ary::_from_string(
+				ast_man.attr("op").type().attr("__name__").to_cstr()
+			);
+			std::unique_ptr<AST> binop = std::make_unique<BinOp>(
+				ast_py2native(ast_man.attr("target")),
+				ast_py2native(ast_man.attr("value")),
+				op
+			);
+			std::vector<std::unique_ptr<AST>> targets;
+			targets.push_back(ast_py2native(ast_man.attr("target")));
+			return std::make_unique<Assign>(
+				binop, targets
+			);
+		}
 		TARGET(AnnAssign) {
 			auto val = ast_man.attr("value");
 			if (val == Py_None)
