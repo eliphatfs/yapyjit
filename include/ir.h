@@ -38,7 +38,7 @@ namespace yapyjit {
 	class LabelIns: public Instruction {
 	public:
 		virtual std::string pretty_print() {
-			return std::to_string((intptr_t)this);
+			return "@" + std::to_string((intptr_t)this);
 		}
 	};
 
