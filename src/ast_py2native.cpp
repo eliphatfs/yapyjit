@@ -2,8 +2,7 @@
 #include <mpyo.h>
 #define TARGET(cls) if (ast_man.is(ast_mod.attr(#cls)))
 namespace yapyjit {
-	std::unique_ptr<AST> ast_py2native(PyObject* ast) {
-		auto ast_man = ManagedPyo(ast, true);
+	std::unique_ptr<AST> ast_py2native(ManagedPyo ast_man) {
 		auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
 		TARGET(BinOp) {
 			Op2ary op = Op2ary::_from_string(

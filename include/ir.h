@@ -2,12 +2,13 @@
 #ifdef _MSC_VER
 #pragma warning (disable: 26812)
 #endif
-#include <enum.h>
-#include <Python.h>
 #include <string>
 #include <vector>
 #include <memory>
 #include <map>
+#include <enum.h>
+#include <Python.h>
+#include <mpyo.h>
 /**
  * yapyjit uses a linear IR based on var-len instructions as a layer
  * between python AST and backend (MIR currently).
@@ -109,18 +110,12 @@ namespace yapyjit {
 	class ConstantIns : public Instruction {
 	public:
 		int dst;
-		PyObject * obj;  // TODO: use managed pyo?
-		ConstantIns(int dst_local_id, PyObject * const_obj)
+		ManagedPyo obj;
+		ConstantIns(int dst_local_id, const ManagedPyo& const_obj)
 			: dst(dst_local_id), obj(const_obj) {
-			Py_XINCREF(obj);
-		}
-		virtual ~ConstantIns() {
-			Py_XDECREF(obj);
 		}
 		virtual std::string pretty_print() {
-			return "ldc $" + std::to_string(dst) + " <- " + std::string(
-				PyUnicode_AsUTF8(PyObject_Repr(obj))
-			);
+			return "ldc $" + std::to_string(dst) + " <- " + obj.repr().to_cstr();
 		}
 	};
 

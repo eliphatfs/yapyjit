@@ -32,7 +32,8 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
     );
     if (!pyast) return nullptr;
 
-    auto ast = yapyjit::ast_py2native(pyast);
+    auto ast = yapyjit::ast_py2native(yapyjit::ManagedPyo(pyast));
+    // lifetime - pyast no longer available
     auto funcast = dynamic_cast<yapyjit::FuncDef*>(ast.get());
     if (!funcast) {
         PyErr_SetString(PyExc_RuntimeError, "BUG: AST root is not function definition.");

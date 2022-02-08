@@ -40,16 +40,16 @@ namespace yapyjit {
 
 		~ManagedPyo() { Py_XDECREF(_obj); }
 
-		ManagedPyo attr(const char* name) {
+		ManagedPyo attr(const char* name) const {
 			return PyObject_GetAttrString(_obj, name);
 		}
 
-		ManagedPyo type() {
+		ManagedPyo type() const {
 			return PyObject_Type(_obj);
 		}
 
-		bool is(const ManagedPyo& type_obj) {
-			return PyObject_IsInstance(_obj, type_obj) > 0;
+		bool is(const ManagedPyo& type_obj) const {
+			return PyObject_IsInstance(_obj, type_obj.borrow()) > 0;
 		}
 
 		template<typename... PyObjectT>
@@ -57,33 +57,48 @@ namespace yapyjit {
 			return PyObject_CallFunctionObjArgs(_obj, args..., nullptr);
 		}
 
-		ManagedPyo str() {
+		ManagedPyo str() const {
 			return PyObject_Str(_obj);
 		}
 
-		const char* to_cstr() {
+		ManagedPyo repr() const {
+			return PyObject_Repr(_obj);
+		}
+
+		const char* to_cstr() const {
 			return PyUnicode_AsUTF8(_obj);
 		}
 
-		long long to_cLL() {
+		long long to_cLL() const {
 			return PyLong_AsLongLong(_obj);
 		}
 
-		_mpyo_seq_iter begin() {
-			return _mpyo_seq_iter(*this, 0, (int)PySequence_Length(_obj));
+		_mpyo_seq_iter begin() const {
+			return _mpyo_seq_iter(this->borrow(), 0, (int)PySequence_Length(_obj));
 		}
 
-		_mpyo_seq_iter end() {
-			return _mpyo_seq_iter(*this, (int)PySequence_Length(_obj), (int)PySequence_Length(_obj));
+		_mpyo_seq_iter end() const {
+			return _mpyo_seq_iter(this->borrow(), (int)PySequence_Length(_obj), (int)PySequence_Length(_obj));
 		}
 
 		// Transfers back ownership
-		PyObject* transfer() {
+		PyObject* transfer() const {
 			Py_XINCREF(_obj);
 			return _obj;
 		}
 
 		// Borrow
-		operator PyObject*() const { return _obj; }
+		PyObject* borrow() const {
+			return _obj;
+		}
+
+		// True if referring to same py object
+		bool ref_eq(const ManagedPyo& other) const {
+			return _obj == other._obj;
+		}
+
+		bool operator==(PyObject* pyo) const {
+			return _obj == pyo;
+		}
 	};
 };

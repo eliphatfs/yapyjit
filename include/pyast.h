@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <enum.h>
 #include <ir.h>
+#include <mpyo.h>
+
 namespace yapyjit {
 	inline int new_temp_var(Function& appender) {
 		for (int i = (int)appender.locals.size();; i++) {
@@ -26,6 +28,7 @@ namespace yapyjit {
 		CONST,
 		RETURN,
 		ASSIGN,
+		IF,
 		FUNCDEF,
 
 		ANN_ASSIGN,
@@ -100,9 +103,9 @@ namespace yapyjit {
 
 	class Constant : public ASTWithTag<ASTTag::CONST> {
 	public:
-		PyObject * value;
-		// TODO: use managed pyo?
-		Constant(PyObject* value_) : value(value_) {}
+		ManagedPyo value;
+
+		Constant(const ManagedPyo& value_) : value(value_) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
 			appender.instructions.push_back(std::make_unique<ConstantIns>(
@@ -130,6 +133,21 @@ namespace yapyjit {
 		std::unique_ptr<AST> expr;
 		std::vector<std::unique_ptr<AST>> targets;
 		Assign(std::unique_ptr<AST>& expr_, std::vector<std::unique_ptr<AST>>& targets_)
+			: expr(std::move(expr_)), targets(std::move(targets_)) {}
+		virtual int emit_ir(Function& appender) {
+			int src = expr->emit_ir(appender);
+			for (auto& target : targets) {
+				assn_ir(appender, target.get(), src);
+			}
+			return -1;
+		}
+	};
+
+	class If : public ASTWithTag<ASTTag::IF> {
+	public:
+		std::unique_ptr<AST> expr;
+		std::vector<std::unique_ptr<AST>> targets;
+		If(std::unique_ptr<AST>& expr_, std::vector<std::unique_ptr<AST>>& targets_)
 			: expr(std::move(expr_)), targets(std::move(targets_)) {}
 		virtual int emit_ir(Function& appender) {
 			int src = expr->emit_ir(appender);
