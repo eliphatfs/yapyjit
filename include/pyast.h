@@ -101,7 +101,7 @@ namespace yapyjit {
 	class Constant : public ASTWithTag<ASTTag::CONST> {
 	public:
 		PyObject * value;
-		// TODO: keep a strong ref?
+		// TODO: use managed pyo?
 		Constant(PyObject* value_) : value(value_) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);

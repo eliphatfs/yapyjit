@@ -109,7 +109,7 @@ namespace yapyjit {
 	class ConstantIns : public Instruction {
 	public:
 		int dst;
-		PyObject * obj;
+		PyObject * obj;  // TODO: use managed pyo?
 		ConstantIns(int dst_local_id, PyObject * const_obj)
 			: dst(dst_local_id), obj(const_obj) {
 			Py_XINCREF(obj);
