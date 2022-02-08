@@ -141,6 +141,18 @@ namespace yapyjit {
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
 		std::map<std::string, int> locals;
-		Function(std::string _name) : name(_name) {}
+		struct {
+			LabelIns* cont_pt, * break_pt;
+		} ctx;
+		Function(std::string _name) : name(_name), ctx() {}
+
+		// Consumes ownership. Recommended to use only with `new` instructions.
+		void new_insn(Instruction * insn) {
+			instructions.push_back(std::unique_ptr<Instruction>(insn));
+		}
+
+		void add_insn(std::unique_ptr<Instruction> insn) {
+			instructions.push_back(std::move(insn));
+		}
 	};
 };

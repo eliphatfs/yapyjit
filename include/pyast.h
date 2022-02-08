@@ -32,6 +32,7 @@ namespace yapyjit {
 		CONST,
 		RETURN,
 		ASSIGN,
+		WHILE,
 		IF,
 		FUNCDEF,
 
@@ -74,17 +75,17 @@ namespace yapyjit {
 				auto lab_b = std::make_unique<LabelIns>(),
 					 lab_e = std::make_unique<LabelIns>();
 				int a_rs = a->emit_ir(appender);
-				appender.instructions.push_back(std::make_unique<MoveIns>(result, a_rs));
-				appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+				appender.new_insn(new MoveIns(result, a_rs));
+				appender.new_insn(new JumpTruthyIns(
 					lab_b.get(), a_rs
 				));
-				appender.instructions.push_back(std::make_unique<JumpIns>(
+				appender.new_insn(new JumpIns(
 					lab_e.get()
 				));
-				appender.instructions.push_back(std::move(lab_b));
+				appender.add_insn(std::move(lab_b));
 				int b_rs = b->emit_ir(appender);
-				appender.instructions.push_back(std::make_unique<MoveIns>(result, b_rs));
-				appender.instructions.push_back(std::move(lab_e));
+				appender.new_insn(new MoveIns(result, b_rs));
+				appender.add_insn(std::move(lab_e));
 			}
 			// a || b
 			// a; mov rs; jt end; b; mov rs; end;
@@ -93,13 +94,13 @@ namespace yapyjit {
 
 				auto lab_e = std::make_unique<LabelIns>();
 				int a_rs = a->emit_ir(appender);
-				appender.instructions.push_back(std::make_unique<MoveIns>(result, a_rs));
-				appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+				appender.new_insn(new MoveIns(result, a_rs));
+				appender.new_insn(new JumpTruthyIns(
 					lab_e.get(), a_rs
 				));
 				int b_rs = b->emit_ir(appender);
-				appender.instructions.push_back(std::make_unique<MoveIns>(result, b_rs));
-				appender.instructions.push_back(std::move(lab_e));
+				appender.new_insn(new MoveIns(result, b_rs));
+				appender.add_insn(std::move(lab_e));
 			}
 			return result;
 		}
@@ -115,7 +116,7 @@ namespace yapyjit {
 
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
-			appender.instructions.push_back(std::make_unique<BinOpIns>(
+			appender.new_insn(new BinOpIns(
 				result, op,
 				left->emit_ir(appender),
 				right->emit_ir(appender)
@@ -133,7 +134,7 @@ namespace yapyjit {
 			: operand(std::move(operand_)), op(op_) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
-			appender.instructions.push_back(std::make_unique<UnaryOpIns>(
+			appender.new_insn(new UnaryOpIns(
 				result, op, operand->emit_ir(appender)
 			));
 			return result;
@@ -153,18 +154,18 @@ namespace yapyjit {
 			int test_rs = test->emit_ir(appender);
 			auto lab_body = std::make_unique<LabelIns>(),
 				 lab_e = std::make_unique<LabelIns>();
-			appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+			appender.new_insn(new JumpTruthyIns(
 				lab_body.get(), test_rs
 			));
 			int orelse_rs = orelse->emit_ir(appender);
-			appender.instructions.push_back(std::make_unique<MoveIns>(result, orelse_rs));
-			appender.instructions.push_back(std::make_unique<JumpIns>(
+			appender.new_insn(new MoveIns(result, orelse_rs));
+			appender.new_insn(new JumpIns(
 				lab_e.get()
 			));
-			appender.instructions.push_back(std::move(lab_body));
+			appender.add_insn(std::move(lab_body));
 			int body_rs = body->emit_ir(appender);
-			appender.instructions.push_back(std::make_unique<MoveIns>(result, body_rs));
-			appender.instructions.push_back(std::move(lab_e));
+			appender.new_insn(new MoveIns(result, body_rs));
+			appender.add_insn(std::move(lab_e));
 			return result;
 		}
 	};
@@ -189,19 +190,19 @@ namespace yapyjit {
 				comparators_res.push_back(comparator->emit_ir(appender));
 			}
 			for (int i = 0; i < ops.size(); i++) {
-				appender.instructions.push_back(std::make_unique<CompareIns>(
+				appender.new_insn(new CompareIns(
 					result, ops[i], comparators_res[i], comparators_res[i + 1]
 				));
-				appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+				appender.new_insn(new JumpTruthyIns(
 					lab_next.get(), result
 				));
-				appender.instructions.push_back(std::make_unique<JumpIns>(
+				appender.new_insn(new JumpIns(
 					lab_e.get()
 				));
-				appender.instructions.push_back(std::move(lab_next));
+				appender.add_insn(std::move(lab_next));
 				lab_next = std::make_unique<LabelIns>();
 			}
-			appender.instructions.push_back(std::move(lab_e));
+			appender.add_insn(std::move(lab_e));
 			return result;
 		}
 	};
@@ -229,7 +230,7 @@ namespace yapyjit {
 		Constant(const ManagedPyo& value_) : value(value_) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
-			appender.instructions.push_back(std::make_unique<ConstantIns>(
+			appender.new_insn(new ConstantIns(
 				result,
 				value
 			));
@@ -244,7 +245,7 @@ namespace yapyjit {
 			: expr(std::move(expr_)) {}
 		virtual int emit_ir(Function& appender) {
 			int ret = expr->emit_ir(appender);
-			appender.instructions.push_back(std::make_unique<ReturnIns>(ret));
+			appender.new_insn(new ReturnIns(ret));
 			return -1;
 		}
 	};
@@ -264,6 +265,32 @@ namespace yapyjit {
 		}
 	};
 
+	class While : public ASTWithTag<ASTTag::WHILE> {
+	public:
+		std::unique_ptr<AST> test;
+		std::vector<std::unique_ptr<AST>> body;
+		std::vector<std::unique_ptr<AST>> orelse;
+		While(std::unique_ptr<AST>& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
+			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
+		virtual int emit_ir(Function& appender) {
+			auto saved_ctx = appender.ctx;
+			auto label_st = std::make_unique<LabelIns>();
+			auto label_orelse = std::make_unique<LabelIns>();
+			auto label_ed = std::make_unique<LabelIns>();
+
+			appender.ctx.cont_pt = label_st.get();
+			appender.ctx.break_pt = label_ed.get();
+
+			// while test body orelse end
+			// start; test; jt body; j orelse; body; j start; orelse; end;
+			appender.add_insn(std::move(label_st));
+			auto test_rs = test->emit_ir(appender);
+
+			appender.ctx = saved_ctx;
+			return -1;
+		}
+	};
+
 	class If : public ASTWithTag<ASTTag::IF> {
 	public:
 		std::unique_ptr<AST> test;
@@ -277,20 +304,16 @@ namespace yapyjit {
 			// a; jt B; C; j end; B; end;
 			auto lab_b = std::make_unique<LabelIns>(),
 				 lab_e = std::make_unique<LabelIns>();
-			appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
-				lab_b.get(), cond
-			));
+			appender.new_insn(new JumpTruthyIns(lab_b.get(), cond));
 			for (auto& stmt : orelse) {
 				stmt->emit_ir(appender);
 			}
-			appender.instructions.push_back(std::make_unique<JumpIns>(
-				lab_e.get()
-			));
-			appender.instructions.push_back(std::move(lab_b));
+			appender.new_insn(new JumpIns(lab_e.get()));
+			appender.add_insn(std::move(lab_b));
 			for (auto& stmt : body) {
 				stmt->emit_ir(appender);
 			}
-			appender.instructions.push_back(std::move(lab_e));
+			appender.add_insn(std::move(lab_e));
 			return -1;
 		}
 	};
@@ -326,6 +349,6 @@ namespace yapyjit {
 		const auto vid = appender.locals.insert(
 			{ ((Name*)dst)->identifier, (int)appender.locals.size() + 1 }
 		).first;  // second is success
-		appender.instructions.push_back(std::make_unique<MoveIns>(vid->second, src));
+		appender.new_insn(new MoveIns(vid->second, src));
 	}
 };
