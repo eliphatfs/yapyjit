@@ -23,6 +23,7 @@ namespace yapyjit {
 	BETTER_ENUM(
 		ASTTag, int,
 		NAME = 1,
+		BOOLOP,
 		BINOP,
 		UNARYOP,
 		CONST,
@@ -48,6 +49,57 @@ namespace yapyjit {
 	template<int T_tag>
 	class ASTWithTag: public AST {
 		virtual ASTTag tag() { return ASTTag::_from_integral(T_tag); }
+	};
+
+	BETTER_ENUM(
+		OpBool, int, And = 1, Or = 2
+	)
+
+	class BoolOp : public ASTWithTag<ASTTag::BOOLOP> {
+	public:
+		std::unique_ptr<AST> a, b;
+		OpBool op;
+
+		BoolOp(std::unique_ptr<AST>& left_, std::unique_ptr<AST>& right_, OpBool op_)
+			: a(std::move(left_)), b(std::move(right_)), op(op_) {}
+
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			// a && b
+			// a; mov rs; jt b; j end; b; mov rs; end;
+			if (op == +OpBool::And) {
+				auto lab_b = std::make_unique<LabelIns>(),
+					 lab_e = std::make_unique<LabelIns>();
+				int a_rs = a->emit_ir(appender);
+				appender.instructions.push_back(std::make_unique<MoveIns>(result, a_rs));
+				appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+					lab_b.get(), a_rs
+				));
+				appender.instructions.push_back(std::make_unique<JumpIns>(
+					lab_e.get()
+				));
+				appender.instructions.push_back(std::move(lab_b));
+				int b_rs = b->emit_ir(appender);
+				appender.instructions.push_back(std::make_unique<MoveIns>(result, b_rs));
+				appender.instructions.push_back(std::move(lab_e));
+			}
+			// a || b
+			// a; mov rs; jt end; b; mov rs; end;
+			else {
+				assert(op == +OpBool::Or);
+
+				auto lab_e = std::make_unique<LabelIns>();
+				int a_rs = a->emit_ir(appender);
+				appender.instructions.push_back(std::make_unique<MoveIns>(result, a_rs));
+				appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+					lab_e.get(), a_rs
+				));
+				int b_rs = b->emit_ir(appender);
+				appender.instructions.push_back(std::make_unique<MoveIns>(result, b_rs));
+				appender.instructions.push_back(std::move(lab_e));
+			}
+			return result;
+		}
 	};
 
 	class BinOp : public ASTWithTag<ASTTag::BINOP> {

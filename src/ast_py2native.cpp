@@ -4,6 +4,26 @@
 namespace yapyjit {
 	std::unique_ptr<AST> ast_py2native(ManagedPyo ast_man) {
 		auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
+		TARGET(BoolOp) {
+			OpBool op = OpBool::_from_string(
+				ast_man.attr("op").type().attr("__name__").to_cstr()
+			);
+			std::unique_ptr<AST> ret = std::make_unique<BoolOp>(
+				ast_py2native(ast_man.attr("values")[0]),
+				ast_py2native(ast_man.attr("values")[1]),
+				op
+			);
+			int skip = 0;
+			for (auto val : ast_man.attr("values")) {
+				if (skip < 2) { ++skip; continue; }
+				ret = std::make_unique<BoolOp>(
+					std::move(ret),
+					ast_py2native(val),
+					op
+				);
+			}
+			return ret;
+		}
 		TARGET(BinOp) {
 			Op2ary op = Op2ary::_from_string(
 				ast_man.attr("op").type().attr("__name__").to_cstr()

@@ -17,7 +17,7 @@ def multi(a):
 
 
 def relu(n):
-    if n:
+    if n and True:
         return n
     return 0
 
