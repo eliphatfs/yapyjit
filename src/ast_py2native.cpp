@@ -1,6 +1,6 @@
 #include <yapyjit.h>
 #include <mpyo.h>
-#define TARGET(cls) if (PyObject_IsInstance(ast, ast_mod.attr(#cls)))
+#define TARGET(cls) if (ast_man.is(ast_mod.attr(#cls)))
 namespace yapyjit {
 	std::unique_ptr<AST> ast_py2native(PyObject* ast) {
 		auto ast_man = ManagedPyo(ast, true);
@@ -47,11 +47,7 @@ namespace yapyjit {
 		}
 		TARGET(Assign) {
 			std::vector<std::unique_ptr<AST>> targets{};
-			auto pytargets = ast_man.attr("targets");
-			auto targetlist = (PyListObject*)(PyObject*)pytargets;
-			Py_ssize_t len = PyList_GET_SIZE(targetlist);
-			for (Py_ssize_t i = 0; i < len; i++) {
-				auto target = PyList_GET_ITEM(targetlist, i);
+			for (auto target : ast_man.attr("targets")) {
 				targets.push_back(ast_py2native(target));
 			}
 			return std::make_unique<Assign>(
@@ -84,19 +80,13 @@ namespace yapyjit {
 			auto name = ast_man.attr("name");
 			result->name = name.to_cstr();
 
-			auto args = ast_man.attr("args").attr("args");
-			auto arglist = (PyListObject*)(PyObject*)args;
-			Py_ssize_t len = PyList_GET_SIZE(arglist);
-			for (Py_ssize_t i = 0; i < len; i++) {
-				auto arg = ManagedPyo(PyList_GET_ITEM(arglist, i), true).attr("arg").to_cstr();
-				result->args.push_back(arg);
+			for (auto arg : ast_man.attr("args").attr("args")) {
+				result->args.push_back(arg.attr("arg").to_cstr());
 			}
 
 			auto stmts = ast_man.attr("body");
-			auto stmtlist = (PyListObject*)(PyObject*)stmts;
-			len = PyList_GET_SIZE(stmtlist);
-			for (Py_ssize_t i = 0; i < len; i++) {
-				auto stmt = ast_py2native(PyList_GET_ITEM(stmtlist, i));
+			for (auto pystmt : stmts) {
+				auto stmt = ast_py2native(pystmt);
 				if (stmt)
 					result->body_stmts.push_back(std::move(stmt));
 			}
