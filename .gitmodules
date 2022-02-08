@@ -1,0 +1,3 @@
+[submodule "mir"]
+	path = mir
+	url = https://github.com/vnmakarov/mir
