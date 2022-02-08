@@ -16,8 +16,14 @@ def multi(a):
     return c
 
 
+def relu(n):
+    if n:
+        return n
+    return 0
+
+
 input("Press Enter to start...")
-for func in [trivial, add, multi]:
+for func in [trivial, add, multi, relu]:
     print(func.__name__)
     print("-" * 40)
     print(yapyjit.get_ir(func), end='')

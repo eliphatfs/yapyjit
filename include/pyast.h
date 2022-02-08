@@ -145,15 +145,31 @@ namespace yapyjit {
 
 	class If : public ASTWithTag<ASTTag::IF> {
 	public:
-		std::unique_ptr<AST> expr;
-		std::vector<std::unique_ptr<AST>> targets;
-		If(std::unique_ptr<AST>& expr_, std::vector<std::unique_ptr<AST>>& targets_)
-			: expr(std::move(expr_)), targets(std::move(targets_)) {}
+		std::unique_ptr<AST> test;
+		std::vector<std::unique_ptr<AST>> body;
+		std::vector<std::unique_ptr<AST>> orelse;
+		If(std::unique_ptr<AST>& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
+			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 		virtual int emit_ir(Function& appender) {
-			int src = expr->emit_ir(appender);
-			for (auto& target : targets) {
-				assn_ir(appender, target.get(), src);
+			int cond = test->emit_ir(appender);
+			// if (a) B else C end
+			// a; jt B; C; j end; B; end;
+			auto lab_b = std::make_unique<LabelIns>(),
+				 lab_e = std::make_unique<LabelIns>();
+			appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+				lab_b.get(), cond
+			));
+			for (auto& stmt : orelse) {
+				stmt->emit_ir(appender);
 			}
+			appender.instructions.push_back(std::make_unique<JumpIns>(
+				lab_e.get()
+			));
+			appender.instructions.push_back(std::move(lab_b));
+			for (auto& stmt : body) {
+				stmt->emit_ir(appender);
+			}
+			appender.instructions.push_back(std::move(lab_e));
 			return -1;
 		}
 	};

@@ -54,6 +54,20 @@ namespace yapyjit {
 				targets
 			);
 		}
+		TARGET(If) {
+			std::vector<std::unique_ptr<AST>> body{};
+			for (auto stmt : ast_man.attr("body")) {
+				body.push_back(ast_py2native(stmt));
+			}
+			std::vector<std::unique_ptr<AST>> orelse{};
+			for (auto stmt : ast_man.attr("orelse")) {
+				orelse.push_back(ast_py2native(stmt));
+			}
+			return std::make_unique<If>(
+				ast_py2native(ast_man.attr("test")),
+				body, orelse
+			);
+		}
 		TARGET(Expr) {
 			return std::make_unique<Assign>(
 				ast_py2native(ast_man.attr("value")),
