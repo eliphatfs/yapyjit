@@ -12,6 +12,15 @@
 /**
  * yapyjit uses a linear IR based on var-len instructions as a layer
  * between python AST and backend (MIR currently).
+ * 
+ * Reference rules:
+ * 1. Local registers are guaranteed to be nullptr before first def/use.
+ * 2. Each local register is either nullptr, or owns a reference in a def-use lifetime.
+ *    No other types of ownership is possible in a function.
+ * 3. After the only use of op contents in a register will be early-cleared
+ *    (does nothing if nullptr; drops reference otherwise).
+ * 
+ * TODO: implement 3, for better worst-case memory usage.
  */
 
 namespace yapyjit {
