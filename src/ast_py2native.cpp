@@ -43,6 +43,25 @@ namespace yapyjit {
 				op
 			);
 		}
+		TARGET(IfExp) {
+			return std::make_unique<IfExp>(
+				ast_py2native(ast_man.attr("test")),
+				ast_py2native(ast_man.attr("body")),
+				ast_py2native(ast_man.attr("orelse"))
+			);
+		}
+		TARGET(Compare) {
+			std::vector<OpCmp> ops{};
+			for (auto op : ast_man.attr("ops")) {
+				ops.push_back(OpCmp::_from_string(op.type().attr("__name__").to_cstr()));
+			}
+			std::vector<std::unique_ptr<AST>> values{};
+			values.push_back(ast_py2native(ast_man.attr("left")));
+			for (auto val : ast_man.attr("comparators")) {
+				values.push_back(ast_py2native(val));
+			}
+			return std::make_unique<Compare>(ops, values);
+		}
 		TARGET(Name) {
 			return std::make_unique<Name>(
 				ast_man.attr("id").to_cstr()

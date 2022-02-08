@@ -26,6 +26,9 @@ namespace yapyjit {
 		BOOLOP,
 		BINOP,
 		UNARYOP,
+		IFEXP,
+		COMPARE,
+		CALL,
 		CONST,
 		RETURN,
 		ASSIGN,
@@ -133,6 +136,72 @@ namespace yapyjit {
 			appender.instructions.push_back(std::make_unique<UnaryOpIns>(
 				result, op, operand->emit_ir(appender)
 			));
+			return result;
+		}
+	};
+
+	class IfExp : public ASTWithTag<ASTTag::IFEXP> {
+	public:
+		std::unique_ptr<AST> test, body, orelse;
+
+		IfExp(std::unique_ptr<AST>& test_, std::unique_ptr<AST>& body_, std::unique_ptr<AST>& orelse_)
+			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			// test ? body : orelse
+			// test; jt body; orelse; mov rs; j end; body; mov rs; end;
+			int test_rs = test->emit_ir(appender);
+			auto lab_body = std::make_unique<LabelIns>(),
+				 lab_e = std::make_unique<LabelIns>();
+			appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+				lab_body.get(), test_rs
+			));
+			int orelse_rs = orelse->emit_ir(appender);
+			appender.instructions.push_back(std::make_unique<MoveIns>(result, orelse_rs));
+			appender.instructions.push_back(std::make_unique<JumpIns>(
+				lab_e.get()
+			));
+			appender.instructions.push_back(std::move(lab_body));
+			int body_rs = body->emit_ir(appender);
+			appender.instructions.push_back(std::make_unique<MoveIns>(result, body_rs));
+			appender.instructions.push_back(std::move(lab_e));
+			return result;
+		}
+	};
+
+	class Compare : public ASTWithTag<ASTTag::COMPARE> {
+	public:
+		std::vector<OpCmp> ops;
+		std::vector<std::unique_ptr<AST>> comparators;
+
+		Compare(std::vector<OpCmp>& ops_, std::vector<std::unique_ptr<AST>>& comparators_)
+			: ops(std::move(ops_)), comparators(std::move(comparators_)) {
+			assert(ops.size() + 1 == comparators.size());
+		}
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			// r1 op1 r2 op2 r3 ...
+			// cmp1; jt cmp2; j end; cmp2; jt cmp3; ... end
+			auto lab_next = std::make_unique<LabelIns>();
+			auto lab_e = std::make_unique<LabelIns>();
+			std::vector<int> comparators_res;
+			for (auto& comparator : comparators) {
+				comparators_res.push_back(comparator->emit_ir(appender));
+			}
+			for (int i = 0; i < ops.size(); i++) {
+				appender.instructions.push_back(std::make_unique<CompareIns>(
+					result, ops[i], comparators_res[i], comparators_res[i + 1]
+				));
+				appender.instructions.push_back(std::make_unique<JumpTruthyIns>(
+					lab_next.get(), result
+				));
+				appender.instructions.push_back(std::make_unique<JumpIns>(
+					lab_e.get()
+				));
+				appender.instructions.push_back(std::move(lab_next));
+				lab_next = std::make_unique<LabelIns>();
+			}
+			appender.instructions.push_back(std::move(lab_e));
 			return result;
 		}
 	};

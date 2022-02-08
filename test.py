@@ -17,13 +17,17 @@ def multi(a):
 
 
 def relu(n):
-    if n and True:
+    if n > 0:
         return n
     return 0
 
 
+def relu2(n):
+    return n if n >= 0 else 0
+
+
 input("Press Enter to start...")
-for func in [trivial, add, multi, relu]:
+for func in [trivial, add, multi, relu, relu2]:
     print(func.__name__)
     print("-" * 40)
     print(yapyjit.get_ir(func), end='')

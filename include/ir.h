@@ -27,6 +27,10 @@ namespace yapyjit {
 		Invert = 1, Not = 2, UAdd = 3, USub = 4
 	)
 
+	BETTER_ENUM(
+		OpCmp, int, Eq = 1, NotEq, Lt, LtE, Gt, GtE, Is, IsNot, In, NotIn
+	)
+
 	// Base class for all instructions
 	class Instruction {
 	public:
@@ -85,6 +89,19 @@ namespace yapyjit {
 			return std::string(op._to_string())
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(operand);
+		}
+	};
+
+	class CompareIns : public Instruction {
+	public:
+		int dst, left, right;
+		OpCmp op;
+		CompareIns(int dst_local_id, OpCmp op_, int left_local_id, int right_local_id)
+			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_) {}
+		virtual std::string pretty_print() {
+			return std::string(op._to_string())
+				+ " $" + std::to_string(dst)
+				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
 	};
 
