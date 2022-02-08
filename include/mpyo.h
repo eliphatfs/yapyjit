@@ -73,6 +73,10 @@ namespace yapyjit {
 			return PyLong_AsLongLong(_obj);
 		}
 
+		ManagedPyo operator[](int idx) {
+			return PySequence_GetItem(_obj, (Py_ssize_t)idx);
+		}
+
 		_mpyo_seq_iter begin() const {
 			return _mpyo_seq_iter(this->borrow(), 0, (int)PySequence_Length(_obj));
 		}
