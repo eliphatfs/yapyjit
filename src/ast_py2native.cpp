@@ -187,7 +187,7 @@ namespace yapyjit {
 			return result;
 		}
 		throw std::invalid_argument(
-			std::string(__FUNCTION__" met unsupported AST type")
+			std::string(__FUNCTION__" met unsupported AST type ")
 			+ ast_man.type().attr("__name__").to_cstr()
 		);
 	}
