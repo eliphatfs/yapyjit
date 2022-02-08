@@ -19,11 +19,12 @@ setuptools.setup(
     ext_modules=[setuptools.Extension(
         "yapyjit",
         glob.glob("src/**/*.c", recursive=True)
-        + glob.glob("src/**/*.cpp", recursive=True),
+        + glob.glob("src/**/*.cpp", recursive=True)
+        + ["mir/mir.c", "mir/mir-gen.c"],
         extra_compile_args=['/DEBUG', '/Z7'],
         extra_link_args=['/DEBUG']
     )],
-    include_dirs=["include"],
+    include_dirs=["include", "mir"],
     classifiers=[
         "Programming Language :: Python :: 3 :: Only",
         "License :: OSI Approved :: Apache Software License"
