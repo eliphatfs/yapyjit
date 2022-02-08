@@ -1,5 +1,7 @@
 #pragma once
+#include <stdexcept>
 #include <Python.h>
+#include <exc_conv.h>
 // Managed PyObject for convenience.
 
 namespace yapyjit {
@@ -31,6 +33,10 @@ namespace yapyjit {
 		// Transfer ownership / new reference to this class.
 		ManagedPyo(PyObject* pyo, bool new_ref = false): _obj(pyo) {
 			if (new_ref) Py_XINCREF(_obj);
+			if (!pyo) {
+				if (PyErr_Occurred()) throw registered_pyexc();
+				throw std::invalid_argument("nullptr given for ManagedPyo");
+			}
 		}
 		
 		// A new, copied reference
