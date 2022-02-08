@@ -39,8 +39,14 @@ def sum1n(n):
     return s
 
 
+def fib(n):
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+
 input("Press Enter to start...")
-for func in [trivial, add, multi, relu, relu2, sum1n]:
+for func in [trivial, add, multi, relu, relu2, sum1n, fib]:
     print(func.__name__)
     print("-" * 40)
     print(yapyjit.get_ir(func), end='')

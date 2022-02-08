@@ -62,6 +62,15 @@ namespace yapyjit {
 			}
 			return std::make_unique<Compare>(ops, values);
 		}
+		TARGET(Call) {
+			std::vector<std::unique_ptr<AST>> args{};
+			for (auto val : ast_man.attr("args")) {
+				args.push_back(ast_py2native(val));
+			}
+			return std::make_unique<Call>(
+				ast_py2native(ast_man.attr("func")), args
+			);
+		}
 		TARGET(Name) {
 			return std::make_unique<Name>(
 				ast_man.attr("id").to_cstr()

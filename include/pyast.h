@@ -209,19 +209,43 @@ namespace yapyjit {
 		}
 	};
 
+	class Call : public ASTWithTag<ASTTag::CALL> {
+	public:
+		std::unique_ptr<AST> func;
+		std::vector<std::unique_ptr<AST>> args;
+		// TODO: support kwargs
+
+		Call(std::unique_ptr<AST>& func_, std::vector<std::unique_ptr<AST>>& args_)
+			: func(std::move(func_)), args(std::move(args_)) {
+		}
+
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			auto call_ins = new CallIns(
+				result, func->emit_ir(appender)
+			);
+			for (auto& arg : args) {
+				call_ins->args.push_back(arg->emit_ir(appender));
+			}
+			appender.new_insn(call_ins);
+			return result;
+		}
+	};
+
 	class Name : public ASTWithTag<ASTTag::NAME> {
 	public:
 		std::string identifier;
 
 		Name(const std::string& identifier_): identifier(identifier_) {}
 		virtual int emit_ir(Function& appender) {
-			auto it = appender.locals.find(identifier);
-			if (it == appender.locals.end())
-				throw std::invalid_argument(
-					std::string(__FUNCTION__" possibly uninitialized local ")
-					+ identifier
-				);
-			return it->second;
+			const auto ins_pair = appender.locals.insert(
+				{ identifier, (int)appender.locals.size() + 1 }
+			);
+			if (ins_pair.second) {
+				// Not exist, assume global
+				appender.globals.insert(identifier);
+			}
+			return ins_pair.first->second;
 		}
 	};
 
@@ -355,6 +379,17 @@ namespace yapyjit {
 			for (auto& stmt : body_stmts) {
 				stmt->emit_ir(appender);
 			}
+			Function prelude = Function(name);
+			for (const auto& glob : appender.globals) {
+				prelude.new_insn(new LoadGlobalIns(
+					appender.locals[glob], glob
+				));
+			}
+			appender.instructions.insert(
+				appender.instructions.begin(),
+				std::make_move_iterator(prelude.instructions.begin()),
+				std::make_move_iterator(prelude.instructions.end())
+			);
 			return -1;
 		}
 		Function emit_ir_f() {
@@ -371,8 +406,17 @@ namespace yapyjit {
 				std::string(__FUNCTION__" got unsupported target with kind ")
 				+ dst->tag()._to_string()
 			);
+		const auto& id = ((Name*)dst)->identifier;
+		if (appender.globals.count(id)) {
+			throw std::invalid_argument(
+				std::string(
+					__FUNCTION__
+					" trying to assign to global variable (or possibly unbound local) `"
+				) + id + "`"
+			);
+		}
 		const auto vid = appender.locals.insert(
-			{ ((Name*)dst)->identifier, (int)appender.locals.size() + 1 }
+			{ id, (int)appender.locals.size() + 1 }
 		).first;  // second is success
 		appender.new_insn(new MoveIns(vid->second, src));
 	}

@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <set>
 #include <enum.h>
 #include <Python.h>
 #include <mpyo.h>
@@ -145,11 +146,41 @@ namespace yapyjit {
 		}
 	};
 
+	class LoadGlobalIns : public Instruction {
+	public:
+		int dst;
+		std::string name;
+		LoadGlobalIns(int dst_local_id, const std::string& name_)
+			: dst(dst_local_id), name(name_) {
+		}
+		virtual std::string pretty_print() {
+			return "ldg $" + std::to_string(dst) + " <- " + name;
+		}
+	};
+
+	class CallIns : public Instruction {
+	public:
+		int dst, func;
+		std::vector<int> args;
+		CallIns(int dst_local_id, int func_local_id)
+			: dst(dst_local_id), func(func_local_id) {
+		}
+		virtual std::string pretty_print() {
+			std::string res = "call $" + std::to_string(dst) + " <- $" + std::to_string(func) + "(";
+			for (size_t i = 0; i < args.size(); i++) {
+				if (i != 0) res += ", ";
+				res += "$" + std::to_string(args[i]);
+			}
+			return res + ")";
+		}
+	};
+
 	class Function {
 	public:
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
 		std::map<std::string, int> locals;
+		std::set<std::string> globals;
 		struct {
 			LabelIns* cont_pt, * break_pt;
 		} ctx;
