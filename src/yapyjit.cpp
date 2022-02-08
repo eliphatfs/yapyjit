@@ -22,14 +22,14 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
         return NULL;
     }
 
-    auto locals = PyDict_New();
-    PyDict_SetItemString(locals, "a", pyfunc);
+    auto locals = yapyjit::ManagedPyo(PyDict_New());
+    PyDict_SetItemString(locals.borrow(), "a", pyfunc);
 
     auto pyast = PyRun_String(
         "__import__('ast').parse(__import__('textwrap').dedent(__import__('inspect').getsource(a))).body[0]",
         Py_eval_input,
-        locals,
-        locals
+        locals.borrow(),
+        locals.borrow()
     );
     if (!pyast) return nullptr;
 
