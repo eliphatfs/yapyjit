@@ -2,6 +2,7 @@
 #include <memory>
 #include <sstream>
 #include <yapyjit.h>
+#include <exc_conv.h>
 #include <pyast.h>
 
 
@@ -54,7 +55,7 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
  * List of functions to add to yapyjit in exec_yapyjit().
  */
 static PyMethodDef yapyjit_functions[] = {
-    { "get_ir", (PyCFunction)yapyjit_ir, METH_VARARGS, yapyjit_get_ir_doc },
+    { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>, METH_VARARGS, yapyjit_get_ir_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 
