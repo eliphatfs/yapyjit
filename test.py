@@ -26,8 +26,21 @@ def relu2(n):
     return n if n >= 0 else 0
 
 
+def sum1n(n):
+    i = 1
+    s = 0
+    while i:
+        s = s + i
+        i = i + 1
+        if i > n:
+            break
+    else:
+        i = 0
+    return s
+
+
 input("Press Enter to start...")
-for func in [trivial, add, multi, relu, relu2]:
+for func in [trivial, add, multi, relu, relu2, sum1n]:
     print(func.__name__)
     print("-" * 40)
     print(yapyjit.get_ir(func), end='')

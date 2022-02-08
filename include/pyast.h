@@ -34,6 +34,8 @@ namespace yapyjit {
 		ASSIGN,
 		WHILE,
 		IF,
+		BREAK,
+		CONTINUE,
 		FUNCDEF,
 
 		ANN_ASSIGN,
@@ -275,6 +277,7 @@ namespace yapyjit {
 		virtual int emit_ir(Function& appender) {
 			auto saved_ctx = appender.ctx;
 			auto label_st = std::make_unique<LabelIns>();
+			auto label_body = std::make_unique<LabelIns>();
 			auto label_orelse = std::make_unique<LabelIns>();
 			auto label_ed = std::make_unique<LabelIns>();
 
@@ -285,8 +288,30 @@ namespace yapyjit {
 			// start; test; jt body; j orelse; body; j start; orelse; end;
 			appender.add_insn(std::move(label_st));
 			auto test_rs = test->emit_ir(appender);
+			appender.new_insn(new JumpTruthyIns(label_body.get(), test_rs));
+			appender.new_insn(new JumpIns(label_orelse.get()));
+			appender.add_insn(std::move(label_body));
+			for (auto& stmt : body) stmt->emit_ir(appender);
+			appender.new_insn(new JumpIns(appender.ctx.cont_pt));
+			appender.add_insn(std::move(label_orelse));
+			for (auto& stmt : orelse) stmt->emit_ir(appender);
+			appender.add_insn(std::move(label_ed));
 
 			appender.ctx = saved_ctx;
+			return -1;
+		}
+	};
+
+	class Break : public ASTWithTag<ASTTag::BREAK> {
+		virtual int emit_ir(Function& appender) {
+			appender.new_insn(new JumpIns(appender.ctx.break_pt));
+			return -1;
+		}
+	};
+
+	class Continue : public ASTWithTag<ASTTag::CONTINUE> {
+		virtual int emit_ir(Function& appender) {
+			appender.new_insn(new JumpIns(appender.ctx.cont_pt));
 			return -1;
 		}
 	};
