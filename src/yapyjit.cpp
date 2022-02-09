@@ -6,9 +6,6 @@
 #include <pyast.h>
 
 
-// extern mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode);
-
-
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
 \
 Get IR of python function func. Returns a string.");
@@ -48,7 +45,6 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
         ss << insn->pretty_print() << std::endl;
     }
     return PyUnicode_FromString(ss.str().c_str());
-    Py_RETURN_TRUE;
 }
 
 /*
