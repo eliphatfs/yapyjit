@@ -379,6 +379,13 @@ namespace yapyjit {
 			for (auto& stmt : body_stmts) {
 				stmt->emit_ir(appender);
 			}
+
+			// Return none if not yet.
+			Return ret_none_default = Return(
+				std::unique_ptr<AST>(new Constant(ManagedPyo(Py_None, true)))
+			);
+			ret_none_default.emit_ir(appender);
+
 			Function prelude = Function(name);
 			for (const auto& glob : appender.globals) {
 				prelude.new_insn(new LoadGlobalIns(
