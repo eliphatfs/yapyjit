@@ -10,6 +10,7 @@
 #include <enum.h>
 #include <Python.h>
 #include <mpyo.h>
+#include <mir_wrapper.h>
 /**
  * yapyjit uses a linear IR based on var-len instructions as a layer
  * between python AST and backend (MIR currently).
@@ -41,11 +42,14 @@ namespace yapyjit {
 		OpCmp, int, Eq = 1, NotEq, Lt, LtE, Gt, GtE, Is, IsNot, In, NotIn
 	)
 
+	class Function;
+
 	// Base class for all instructions
 	class Instruction {
 	public:
 		virtual ~Instruction() = default;
 		virtual std::string pretty_print() = 0;
+		virtual void emit(Function* func) = 0;
 	};
 
 	// Empty nop instruction designated for use as labels
@@ -54,6 +58,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "@" + std::to_string((intptr_t)this);
 		}
+		virtual void emit(Function* func);
 	};
 
 	class ReturnIns : public Instruction {
@@ -63,6 +68,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ret $" + std::to_string(src);
 		}
+		virtual void emit(Function* func);
 	};
 
 	class MoveIns : public Instruction {
@@ -74,6 +80,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "mov $" + std::to_string(dst) + " <- $" + std::to_string(src);
 		}
+		virtual void emit(Function* func);
 	};
 
 	class BinOpIns : public Instruction {
@@ -87,6 +94,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
+		virtual void emit(Function* func);
 	};
 
 	class UnaryOpIns : public Instruction {
@@ -100,6 +108,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(operand);
 		}
+		virtual void emit(Function* func);
 	};
 
 	class CompareIns : public Instruction {
@@ -113,6 +122,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
+		virtual void emit(Function* func);
 	};
 
 	class JumpIns : public Instruction {
@@ -122,6 +132,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "jmp " + target->pretty_print();
 		}
+		virtual void emit(Function* func);
 	};
 
 	class JumpTruthyIns : public JumpIns {
@@ -132,6 +143,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
+		virtual void emit(MIRFunction* func, MIRModule* mod);
 	};
 
 	class ConstantIns : public Instruction {
@@ -144,6 +156,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ldc $" + std::to_string(dst) + " <- " + obj.repr().to_cstr();
 		}
+		virtual void emit(Function* func);
 	};
 
 	class LoadGlobalIns : public Instruction {
@@ -156,6 +169,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ldg $" + std::to_string(dst) + " <- " + name;
 		}
+		virtual void emit(Function* func);
 	};
 
 	class CallIns : public Instruction {
@@ -173,6 +187,7 @@ namespace yapyjit {
 			}
 			return res + ")";
 		}
+		virtual void emit(Function* func);
 	};
 
 	class Function {
@@ -184,6 +199,8 @@ namespace yapyjit {
 		struct {
 			LabelIns* cont_pt, * break_pt;
 		} ctx;
+		std::unique_ptr<MIRFunction> emit_ctx;
+		std::map<LabelIns*, MIRLabelOp> emit_label_map;
 		Function(std::string _name) : name(_name), ctx() {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.

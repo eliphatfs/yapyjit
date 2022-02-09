@@ -2,70 +2,99 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <map>
+#include <stdexcept>
 #include <initializer_list>
+#include <stdio.h>
 #include <mir.h>
 #include <mir-gen.h>
 
-class MIROperand {
+class MIRModule;
+class MIROp {
 public:
 	MIR_op_t op;
-	MIROperand(MIR_op_t op_) : op(op_) {
+	MIROp(MIR_op_t op_) : op(op_) {
 	}
-	MIROperand(int64_t i): op(MIR_new_int_op(nullptr, i)) {
+	MIROp(int64_t i): op(MIR_new_int_op(nullptr, i)) {
 	}
-	MIROperand(uint64_t u) : op(MIR_new_uint_op(nullptr, u)) {
-	}
+	/*MIROp(uint64_t u) : op(MIR_new_uint_op(nullptr, u)) {
+	}*/
 };
 
-class MIRLabelOperand : public MIROperand {
+class MIRLabelOp : public MIROp {
 public:
-	MIRLabelOperand(MIR_label_t label) : MIROperand(MIR_new_label_op(nullptr, label)) {}
-	operator MIROperand() { return MIROperand(op); }
+	MIRLabelOp(MIR_label_t label) : MIROp(MIR_new_label_op(nullptr, label)) {}
+	operator MIROp() { return MIROp(op); }
 };
 
-class MIRRegOperand : public MIROperand {
+class MIRRegOp : public MIROp {
 public:
-	MIRRegOperand(MIR_reg_t reg) : MIROperand(MIR_new_reg_op(nullptr, reg)) {}
-	operator MIROperand() { return MIROperand(op); }
+	// 0 for an empty (zero?) reg.
+	MIRRegOp(MIR_reg_t reg) : MIROp(MIR_new_reg_op(nullptr, reg)) {}
+	operator MIROp() { return MIROp(op); }
+};
+
+class MIRRefOp : public MIROp {
+public:
+	MIRRefOp(MIR_item_t item) : MIROp(MIR_new_ref_op(nullptr, item)) {}
+	operator MIROp() { return MIROp(op); }
+};
+
+class MIRMemOp : public MIROp {
+public:
+	MIRMemOp(MIR_type_t ty, MIRRegOp base, int64_t offset, MIRRegOp idx = 0, uint8_t scale = 1)
+		: MIROp(MIR_new_mem_op(nullptr, ty, offset, base.op.u.reg, idx.op.u.reg, scale)) {}
+	operator MIROp() { return MIROp(op); }
 };
 
 class MIRFunction final {
 public:
 	MIR_context_t ctx;
+	MIRModule* parent;
 	MIR_item_t func;
-	template <typename... MIR_args>
 	MIRFunction(
-		MIR_context_t ctx_, const std::string& name, 
-		MIR_type_t ret_type, MIR_args ...args
-	) : ctx(ctx_), func(MIR_new_func(
-		ctx_, name.c_str(), 1, &ret_type, sizeof...(MIR_args) / 2, args...
-	)) {
-		static_assert(sizeof...(MIR_args) % 2 == 0, "args should be an array of MIR_type_t and const char*");
+		MIR_context_t ctx_, MIRModule* parent_, const std::string& name,
+		MIR_type_t ret_type, std::initializer_list<MIR_type_t> arg_tys
+	) : ctx(ctx_), parent(parent_), func(nullptr) {
+		std::vector<std::string> argv;
+		for (size_t i = 1; i <= arg_tys.size(); i++) argv.push_back("x" + std::to_string(i));
+		std::vector<MIR_var_t> args;
+		for (size_t i = 0; i < arg_tys.size(); i++) {
+			args.push_back({ arg_tys.begin()[i], argv[i].c_str() });
+		}
+		func = MIR_new_func_arr(
+			ctx_, name.c_str(),
+			ret_type == MIR_T_BOUND ? 0 : 1, &ret_type,
+			args.size(), args.data()
+		);
 	}
 
-	MIRRegOperand get_reg(const std::string& name) {
+	MIRRegOp get_reg(const int reg_id) {
+		auto name = ("x" + std::to_string(reg_id));
 		return MIR_reg(ctx, name.c_str(), func->u.func);
 	}
 
-	MIRRegOperand new_reg(MIR_type_t regtype, const std::string& name) {
+	MIRRegOp new_reg(MIR_type_t regtype, const int reg_id) {
+		auto name = ("x" + std::to_string(reg_id));  // MIR works with strings
+		// TODO: reconsider this design
 		return MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str());
 	}
 
-	MIRLabelOperand new_label() {
+	MIRLabelOp new_label() {
 		return MIR_new_label(ctx);
 	}
 
-	void append_label(MIRLabelOperand lab) {
+	void append_label(MIRLabelOp lab) {
 		MIR_append_insn(ctx, func, lab.op.u.label);
 	}
 
-	void append_insn(MIR_insn_code_t code, std::initializer_list<MIROperand> operands) {
+	void append_insn(MIR_insn_code_t code, std::initializer_list<MIROp> Ops) {
 		std::vector<MIR_op_t> v;
-		for (const auto& op : operands) {
+		for (const auto& op : Ops) {
 			v.push_back(op.op);
 		}
 		MIR_append_insn(ctx, func, MIR_new_insn_arr(
-			ctx, code, operands.size(), v.data()
+			ctx, code, Ops.size(), v.data()
 		));
 	}
 
@@ -75,20 +104,73 @@ public:
 };
 
 class MIRModule final {
+	int proto_cnt;
 public:
 	MIR_context_t ctx;
 	MIR_module_t m;
+	std::map<std::string, MIR_item_t> item_table;
 	MIRModule(MIR_context_t ctx_, const std::string& name):
-		ctx(ctx_), m(MIR_new_module(ctx_, name.c_str())) {
+		ctx(ctx_), m(MIR_new_module(ctx_, name.c_str())), proto_cnt(1) {
 	}
 	~MIRModule() {
 		MIR_finish_module(ctx);
 	}
 
-	std::unique_ptr<MIRFunction> new_func(const std::string& name) {
-		return std::make_unique<MIRFunction>(ctx, name);
+	MIRRefOp ensure_import(const std::string& name) {
+		auto it = item_table.find(name);
+		if (it != item_table.end())
+			return it->second;
+		auto item = MIR_new_import(ctx, name.c_str());
+		item_table.insert({ name, item });
+		return item;
+	}
+
+	MIRRefOp new_proto(
+		MIR_type_t* ret_type_optional, std::initializer_list<MIR_type_t> args
+	) {
+		std::string name = "_yapyjit_proto_" + std::to_string(proto_cnt++);
+		std::vector<std::string> argv;
+		std::vector<MIR_var> v;
+		for (size_t i = 0; i < args.size(); i++) argv.push_back("a" + std::to_string(i));
+		for (size_t i = 0; i < args.size(); i++) v.push_back({ args.begin()[i], argv[i].c_str() });
+		return MIR_new_proto_arr(
+			ctx, name.c_str(),
+			ret_type_optional ? 1 : 0, ret_type_optional,
+			args.size(),
+			v.data()
+		);
+	}
+
+	std::unique_ptr<MIRFunction> new_func(
+		const std::string& name,
+		MIR_type_t ret_type, std::initializer_list<MIR_type_t> arg_tys
+	) {
+		MIR_new_export(ctx, name.c_str());
+		/*auto res = item_table.insert({name,});
+		if (!res.second) {
+			throw std::invalid_argument(
+				__FUNCTION__" function `" + name + "` already exists in this module."
+			);
+		}*/
+		return std::make_unique<MIRFunction>(ctx, this, name, ret_type, arg_tys);
 	}
 };
+
+static void MIR_NO_RETURN mir_error(enum MIR_error_type error_type, const char* format, ...) {
+	va_list ap;
+
+	va_start(ap, format);
+	int size_s = vsnprintf(nullptr, 0, format, ap) + 1; // Extra space for '\0'
+	if (size_s <= 0) {
+		throw std::runtime_error("MIR error, but got another error when reporting.");
+	}
+	auto size = static_cast<size_t>(size_s);
+	auto buf = std::make_unique<char[]>(size);
+	vsnprintf(buf.get(), size, format, ap);
+	va_end(ap);
+	throw std::logic_error("MIR error: " + std::string(buf.get(), buf.get() + size - 1));
+}
+
 
 class MIRContext final {
 public:
@@ -96,6 +178,7 @@ public:
 	MIRContext(): ctx(MIR_init()) {
 		MIR_gen_init(ctx, 1);
 		MIR_gen_set_optimize_level(ctx, 0, 3);
+		MIR_set_error_func(ctx, mir_error);
 	}
 
 	~MIRContext() {
@@ -105,5 +188,18 @@ public:
 
 	std::unique_ptr<MIRModule> new_module(const std::string& name) {
 		return std::make_unique<MIRModule>(ctx, name);
+	}
+
+	MIR_module_t scan_mir(const char* mir) {
+		MIR_scan_string(ctx, mir);
+		return DLIST_TAIL(MIR_module_t, *MIR_get_module_list(ctx));
+	}
+
+	void load_module(MIR_module_t mod) {
+		MIR_load_module(ctx, mod);
+	}
+
+	void load_sym(const std::string& name, void* sym) {
+		MIR_load_external(ctx, name.c_str(), sym);
 	}
 };
