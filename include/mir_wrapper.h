@@ -119,6 +119,16 @@ public:
 		MIR_append_insn(ctx, func, lab.op.u.label);
 	}
 
+	void append_insn(MIR_insn_code_t code, const std::vector<MIROp>& Ops) {
+		std::vector<MIR_op_t> v;
+		for (const auto& op : Ops) {
+			v.push_back(op.op);
+		}
+		MIR_append_insn(ctx, func, MIR_new_insn_arr(
+			ctx, code, Ops.size(), v.data()
+		));
+	}
+
 	void append_insn(MIR_insn_code_t code, std::initializer_list<MIROp> Ops) {
 		std::vector<MIR_op_t> v;
 		for (const auto& op : Ops) {
