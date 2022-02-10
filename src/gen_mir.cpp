@@ -3,7 +3,7 @@
 // #include <mir_link.h>
 
 namespace yapyjit {
-	static MIRContext mir_ctx = MIRContext();
+	MIRContext mir_ctx = MIRContext();
 
 	inline MIRLabelOp emit_jump_if(MIRFunction* func, MIROp op64i) {
 		auto ret = func->new_label();
@@ -35,7 +35,7 @@ namespace yapyjit {
 		auto rc_pos = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_refcnt)>::t, op, offsetof(PyObject, ob_refcnt));
 		auto skip = emit_jump_if_not(func, op);
 		func->append_insn(MIR_SUB, { rc_pos, rc_pos, 1 });
-		auto skip_dealloc = emit_jump_if_not(func, rc_pos);
+		auto skip_dealloc = emit_jump_if(func, rc_pos);
 		emit_1pyo_call_void(func, (int64_t)_Py_Dealloc, op);
 		func->append_label(skip_dealloc);
 		func->append_label(skip);
@@ -74,6 +74,18 @@ namespace yapyjit {
 		func->append_insn(MIR_CALL, {
 			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIR_T_P }),
 			addr, ret, a, b, c
+		});
+	}
+
+	void debug_print(PyObject* pyo) {
+		printf("\ndebug_print: object at %p\n", pyo);
+		PyObject_Print(pyo, stdout, 0);
+	}
+
+	inline void emit_debug_print_pyo(MIRFunction* func, MIROp prt) {
+		func->append_insn(MIR_CALL, {
+			func->parent->new_proto(nullptr, { MIR_T_P }),
+			(intptr_t)debug_print, prt
 		});
 	}
 
@@ -229,20 +241,45 @@ namespace yapyjit {
 		}
 	}
 
+	
+
 	void CallIns::emit(Function* ctx) {
 		auto emit_ctx = ctx->emit_ctx.get();
 		auto target = ctx->emit_ctx->get_reg(dst);
 		auto pyfn = ctx->emit_ctx->get_reg(func);
 		emit_disown(emit_ctx, target);
-		auto ty = MIR_T_P;
-		std::vector<MIROp> ops = {
-			emit_ctx->parent->new_proto(&ty, { MIR_T_P }, true),
-			(int64_t)PyObject_CallFunctionObjArgs, target, pyfn
-		};
-		for (auto arg : args) {
-			ops.push_back(ctx->emit_ctx->get_reg(arg));
+
+		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size());
+		if (!tuple_fill) throw registered_pyexc();
+		ctx->emit_keeprefs.push_back(ManagedPyo(tuple_fill));
+
+		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
+		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
+			emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(
+					MIR_T_P, MIRRegOp(0),
+					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
+				),
+				ctx->emit_ctx->get_reg(args[i])
+			});
 		}
-		emit_ctx->append_insn(MIR_CALL, ops);
+		// emit_debug_print_pyo(emit_ctx, pyfn);
+		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
+		auto ty = MIR_T_P;
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(&ty, { MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_CallObject, target, pyfn, (int64_t)tuple_fill
+		});
+
+		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
+			emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(
+					MIR_T_P, MIRRegOp(0),
+					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
+				),
+				0
+			});
+		}
 	}
 
 	MIR_item_t generate_mir(Function& func) {
