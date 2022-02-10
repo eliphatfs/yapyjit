@@ -30,7 +30,7 @@ public:
 class MIRRegOp : public MIROp {
 public:
 	// 0 for an empty (zero?) reg.
-	MIRRegOp(MIR_reg_t reg) : MIROp(MIR_new_reg_op(nullptr, reg)) {}
+	explicit MIRRegOp(MIR_reg_t reg) : MIROp(MIR_new_reg_op(nullptr, reg)) {}
 	operator MIROp() { return MIROp(op); }
 };
 
@@ -42,7 +42,7 @@ public:
 
 class MIRMemOp : public MIROp {
 public:
-	MIRMemOp(MIR_type_t ty, MIRRegOp base, int64_t offset, MIRRegOp idx = 0, uint8_t scale = 1)
+	MIRMemOp(MIR_type_t ty, MIRRegOp base, int64_t offset, MIRRegOp idx = MIRRegOp(0), uint8_t scale = 1)
 		: MIROp(MIR_new_mem_op(nullptr, ty, offset, base.op.u.reg, idx.op.u.reg, scale)) {}
 	operator MIROp() { return MIROp(op); }
 };
@@ -71,13 +71,13 @@ public:
 
 	MIRRegOp get_reg(const int reg_id) {
 		auto name = ("x" + std::to_string(reg_id));
-		return MIR_reg(ctx, name.c_str(), func->u.func);
+		return MIRRegOp(MIR_reg(ctx, name.c_str(), func->u.func));
 	}
 
 	MIRRegOp new_reg(MIR_type_t regtype, const int reg_id) {
 		auto name = ("x" + std::to_string(reg_id));  // MIR works with strings
 		// TODO: reconsider this design
-		return MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str());
+		return MIRRegOp(MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str()));
 	}
 
 	MIRLabelOp new_label() {
