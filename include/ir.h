@@ -196,6 +196,7 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<Instruction>> instructions;
 		std::map<std::string, int> locals;
 		std::set<std::string> globals;
+		int nargs;
 		struct {
 			LabelIns* cont_pt, * break_pt;
 		} ctx;
@@ -203,7 +204,7 @@ namespace yapyjit {
 		std::unique_ptr<MIRFunction> emit_ctx;
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
-		Function(std::string _name) : name(_name), ctx() {}
+		Function(std::string _name, int nargs_) : name(_name), ctx(), nargs(nargs_) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.
 		void new_insn(Instruction * insn) {

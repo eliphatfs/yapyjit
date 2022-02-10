@@ -3,7 +3,7 @@
 // #include <mir_link.h>
 
 namespace yapyjit {
-	static MIRContext ctx = MIRContext();
+	static MIRContext mir_ctx = MIRContext();
 
 	inline MIRLabelOp emit_jump_if(MIRFunction* func, MIROp op64i) {
 		auto ret = func->new_label();
@@ -18,7 +18,7 @@ namespace yapyjit {
 	}
 
 	inline void emit_newown(MIRFunction* func, MIRRegOp op) {
-		auto rc_pos = MIRMemOp(MIR_T_I64, op, offsetof(PyObject, ob_refcnt));
+		auto rc_pos = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_refcnt)>::t, op, offsetof(PyObject, ob_refcnt));
 		auto skip = emit_jump_if_not(func, op);
 		func->append_insn(MIR_ADD, { rc_pos, rc_pos, 1 });
 		func->append_label(skip);
@@ -32,7 +32,7 @@ namespace yapyjit {
 	}
 
 	inline void emit_disown(MIRFunction* func, MIRRegOp op) {
-		auto rc_pos = MIRMemOp(MIR_T_I64, op, offsetof(PyObject, ob_refcnt));
+		auto rc_pos = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_refcnt)>::t, op, offsetof(PyObject, ob_refcnt));
 		auto skip = emit_jump_if_not(func, op);
 		func->append_insn(MIR_SUB, { rc_pos, rc_pos, 1 });
 		auto skip_dealloc = emit_jump_if_not(func, rc_pos);
@@ -243,5 +243,47 @@ namespace yapyjit {
 			ops.push_back(ctx->emit_ctx->get_reg(arg));
 		}
 		emit_ctx->append_insn(MIR_CALL, ops);
+	}
+
+	MIR_item_t generate_mir(Function& func) {
+		auto mod = mir_ctx.new_module(func.name);
+		func.emit_ctx = mod->new_func(func.name, MIR_T_P, { MIR_T_P, MIR_T_P });
+
+		for (auto& loc : func.locals) {
+			func.emit_ctx->new_reg(MIR_T_I64, loc.second);
+		}
+
+		for (int i = 0; i < func.nargs; i++) {
+			auto targ = func.emit_ctx->get_reg(i + 1);
+			func.emit_ctx->append_insn(MIR_MOV, {
+				targ,
+				MIRMemOp(
+					MIR_T_P, func.emit_ctx->get_arg(1),
+					offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
+				)
+			});
+			emit_newown(func.emit_ctx.get(), targ);
+		}
+		for (int i = func.nargs; i < (int)func.locals.size(); i++) {
+			func.emit_ctx->append_insn(MIR_MOV, {
+				func.emit_ctx->get_reg(i + 1), 0
+			});
+		}
+
+		for (auto& ins : func.instructions) {
+			ins->emit(&func);
+		}
+
+		auto mir_func = func.emit_ctx->func;
+		func.emit_ctx.reset(nullptr);
+		func.emit_label_map.clear();
+
+		auto mir_mod = mod->m;
+		mod.reset(nullptr);
+
+		mir_ctx.load_module(mir_mod);
+		MIR_link(mir_ctx.ctx, MIR_set_gen_interface, nullptr);
+
+		return mir_func;
 	}
 };

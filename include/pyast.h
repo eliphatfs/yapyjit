@@ -386,7 +386,7 @@ namespace yapyjit {
 			);
 			ret_none_default.emit_ir(appender);
 
-			Function prelude = Function(name);
+			Function prelude = Function(name, 0);
 			for (const auto& glob : appender.globals) {
 				prelude.new_insn(new LoadGlobalIns(
 					appender.locals[glob], glob
@@ -400,7 +400,7 @@ namespace yapyjit {
 			return -1;
 		}
 		Function emit_ir_f() {
-			Function result = Function(name);
+			Function result = Function(name, static_cast<int>(args.size()));
 			emit_ir(result);
 			return result;
 		}

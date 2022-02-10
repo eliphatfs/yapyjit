@@ -83,7 +83,7 @@ public:
 		MIR_type_t ret_type, std::initializer_list<MIR_type_t> arg_tys
 	) : ctx(ctx_), parent(parent_), func(nullptr), _temp_reg_id(1) {
 		std::vector<std::string> argv;
-		for (size_t i = 1; i <= arg_tys.size(); i++) argv.push_back("x" + std::to_string(i));
+		for (size_t i = 0; i < arg_tys.size(); i++) argv.push_back("a" + std::to_string(i));
 		std::vector<MIR_var_t> args;
 		for (size_t i = 0; i < arg_tys.size(); i++) {
 			args.push_back({ arg_tys.begin()[i], argv[i].c_str() });
@@ -93,6 +93,11 @@ public:
 			ret_type == MIR_T_BOUND ? 0 : 1, &ret_type,
 			args.size(), args.data()
 		);
+	}
+
+	MIRRegOp get_arg(const int arg_id) {
+		auto name = ("a" + std::to_string(arg_id));
+		return MIRRegOp(MIR_reg(ctx, name.c_str(), func->u.func));
 	}
 
 	MIRRegOp get_reg(const int reg_id) {
