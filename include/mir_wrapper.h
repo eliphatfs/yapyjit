@@ -157,14 +157,14 @@ public:
 	}
 
 	MIRRefOp new_proto(
-		MIR_type_t* ret_type_optional, std::initializer_list<MIR_type_t> args
+		MIR_type_t* ret_type_optional, std::initializer_list<MIR_type_t> args, bool variadic = false
 	) {
 		std::string name = "_yapyjit_proto_" + std::to_string(proto_cnt++);
 		std::vector<std::string> argv;
 		std::vector<MIR_var> v;
 		for (size_t i = 0; i < args.size(); i++) argv.push_back("a" + std::to_string(i));
 		for (size_t i = 0; i < args.size(); i++) v.push_back({ args.begin()[i], argv[i].c_str() });
-		return MIR_new_proto_arr(
+		return (variadic ? MIR_new_vararg_proto_arr : MIR_new_proto_arr)(
 			ctx, name.c_str(),
 			ret_type_optional ? 1 : 0, ret_type_optional,
 			args.size(),
