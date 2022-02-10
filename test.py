@@ -45,6 +45,10 @@ def fib(n):
     return fib(n - 1) + fib(n - 2)
 
 
+def call():
+    return range(2)
+
+
 input("Press Enter to start...")
 for func in [trivial, add, multi, relu, relu2, sum1n, fib]:
     print(func.__name__)
@@ -52,3 +56,24 @@ for func in [trivial, add, multi, relu, relu2, sum1n, fib]:
     print(yapyjit.get_ir(func), end='')
     print("-" * 40)
     print()
+
+assert trivial() == yapyjit.jit(trivial)()
+yapyjit.jit(trivial).mir("trivial.mir")
+print("trivial() == yapyjit.jit(trivial)()")
+yapyjit.jit(add).mir("add.mir")
+assert add(1, 2) == yapyjit.jit(add)(1, 2)
+print("add(1, 2) == yapyjit.jit(add)(1, 2)")
+assert multi(2) == yapyjit.jit(multi)(2)
+print("multi(2) == yapyjit.jit(multi)(2)")
+assert relu(2.4) == relu2(2.4) == yapyjit.jit(relu)(2.4) == yapyjit.jit(relu2)(2.4)
+print("relu(2.4) == relu2(2.4) == yapyjit.jit(relu)(2.4) == yapyjit.jit(relu2)(2.4)")
+assert sum1n(10) == yapyjit.jit(sum1n)(10)
+print("sum1n(10) == yapyjit.jit(sum1n)(10)")
+yapyjit.jit(call).mir("call.mir")
+assert call() == yapyjit.jit(call)()
+print("call() == yapyjit.jit(call)()")
+yapyjit.jit(fib).mir("fib.mir")
+res = fib(10)
+fib = yapyjit.jit(fib)
+assert fib(10) == res
+print("fib(10) == yapyjit.jit(fib)(10)")

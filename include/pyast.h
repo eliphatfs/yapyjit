@@ -399,10 +399,10 @@ namespace yapyjit {
 			);
 			return -1;
 		}
-		Function emit_ir_f() {
-			Function result = Function(name, static_cast<int>(args.size()));
-			emit_ir(result);
-			return result;
+		std::unique_ptr<Function> emit_ir_f() {
+			auto result = std::make_unique<Function>(name, static_cast<int>(args.size()));
+			emit_ir(*result);
+			return std::move(result);
 		}
 	};
 

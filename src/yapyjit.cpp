@@ -19,29 +19,10 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
         return NULL;
     }
 
-    auto locals = yapyjit::ManagedPyo(PyDict_New());
-    PyDict_SetItemString(locals.borrow(), "a", pyfunc);
-
-    auto pyast = PyRun_String(
-        "__import__('ast').parse(__import__('textwrap').dedent(__import__('inspect').getsource(a))).body[0]",
-        Py_eval_input,
-        locals.borrow(),
-        locals.borrow()
-    );
-    if (!pyast) return nullptr;
-
-    auto ast = yapyjit::ast_py2native(yapyjit::ManagedPyo(pyast));
-    // lifetime - pyast no longer available
-    auto funcast = dynamic_cast<yapyjit::FuncDef*>(ast.get());
-    if (!funcast) {
-        PyErr_SetString(PyExc_RuntimeError, "BUG: AST root is not function definition.");
-        return nullptr;
-    }
-
-    auto ir = funcast->emit_ir_f();
+    auto ir = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc));
     
     std::stringstream ss;
-    for (auto& insn : ir.instructions) {
+    for (auto& insn : ir->instructions) {
         ss << insn->pretty_print() << std::endl;
     }
     return PyUnicode_FromString(ss.str().c_str());
@@ -66,6 +47,9 @@ int exec_yapyjit(PyObject *module) {
     PyModule_AddStringConstant(module, "__version__", "0.0.1a1");
     PyModule_AddIntConstant(module, "year", 2022);
 
+    if (yapyjit::initialize_wf(module)) {
+        return -1;
+    }
     return 0; /* success */
 }
 
