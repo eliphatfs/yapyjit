@@ -21,6 +21,31 @@ public:
 	}*/
 };
 
+template<MIR_type_t _ty>
+struct _const_mir_ty {
+	static const MIR_type_t t = _ty;
+};
+
+template<int size> struct SizedMIRInt;
+template<> struct SizedMIRInt<1> : _const_mir_ty<MIR_T_I8> {};
+template<> struct SizedMIRInt<2> : _const_mir_ty<MIR_T_I16> {};
+template<> struct SizedMIRInt<4> : _const_mir_ty<MIR_T_I32> {};
+template<> struct SizedMIRInt<8> : _const_mir_ty<MIR_T_I64> {};
+
+template<int size> struct SizedMIRFloat;
+template<> struct SizedMIRFloat<4> : _const_mir_ty<MIR_T_F> {};
+template<> struct SizedMIRFloat<8> : _const_mir_ty<MIR_T_D> {};
+
+template<typename T> struct MIRType;
+template<> struct MIRType<signed char> : SizedMIRInt<sizeof(signed char)> {};
+template<> struct MIRType<short> : SizedMIRInt<sizeof(short)> {};
+template<> struct MIRType<int> : SizedMIRInt<sizeof(int)> {};
+template<> struct MIRType<long> : SizedMIRInt<sizeof(long)> {};
+template<> struct MIRType<long long> : SizedMIRInt<sizeof(long long)> {};
+
+template<> struct MIRType<float> : SizedMIRFloat<sizeof(float)> {};
+template<> struct MIRType<double> : SizedMIRFloat<sizeof(double)> {};
+
 class MIRLabelOp : public MIROp {
 public:
 	MIRLabelOp(MIR_label_t label) : MIROp(MIR_new_label_op(nullptr, label)) {}
@@ -48,6 +73,7 @@ public:
 };
 
 class MIRFunction final {
+	int _temp_reg_id;
 public:
 	MIR_context_t ctx;
 	MIRModule* parent;
@@ -55,7 +81,7 @@ public:
 	MIRFunction(
 		MIR_context_t ctx_, MIRModule* parent_, const std::string& name,
 		MIR_type_t ret_type, std::initializer_list<MIR_type_t> arg_tys
-	) : ctx(ctx_), parent(parent_), func(nullptr) {
+	) : ctx(ctx_), parent(parent_), func(nullptr), _temp_reg_id(1) {
 		std::vector<std::string> argv;
 		for (size_t i = 1; i <= arg_tys.size(); i++) argv.push_back("x" + std::to_string(i));
 		std::vector<MIR_var_t> args;
@@ -77,6 +103,11 @@ public:
 	MIRRegOp new_reg(MIR_type_t regtype, const int reg_id) {
 		auto name = ("x" + std::to_string(reg_id));  // MIR works with strings
 		// TODO: reconsider this design
+		return MIRRegOp(MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str()));
+	}
+
+	MIRRegOp new_temp_reg(MIR_type_t regtype) {
+		auto name = ("z" + std::to_string(_temp_reg_id++));
 		return MIRRegOp(MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str()));
 	}
 
