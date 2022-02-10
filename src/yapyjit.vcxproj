@@ -116,7 +116,7 @@
     <LocalDebuggerCommandArguments>-i -c "print('&gt;&gt;&gt; import yapyjit'); import yapyjit"</LocalDebuggerCommandArguments>
     <LocalDebuggerEnvironment>PYTHONPATH=$(OutDir)</LocalDebuggerEnvironment>
     <DebuggerFlavor>$(DefaultDebuggerFlavor)</DebuggerFlavor>
-    <IncludePath>$(IncludePath)</IncludePath>
+    <IncludePath>I:\ScarletX\yapyjit\include;$(IncludePath)</IncludePath>
     <LibraryPath>I:\CondaM\libs;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -126,7 +126,7 @@
     <LocalDebuggerCommandArguments>-i -c "print('&gt;&gt;&gt; import yapyjit'); import yapyjit"</LocalDebuggerCommandArguments>
     <LocalDebuggerEnvironment>PYTHONPATH=$(OutDir)</LocalDebuggerEnvironment>
     <DebuggerFlavor>$(DefaultDebuggerFlavor)</DebuggerFlavor>
-    <IncludePath>$(IncludePath)</IncludePath>
+    <IncludePath>I:\ScarletX\yapyjit\include;$(IncludePath)</IncludePath>
     <LibraryPath>I:\CondaM\libs;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -147,7 +147,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary Condition="$(PythonCoreDVersion) == ''">MultithreadedDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>I:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>I:\ScarletX\yapyjit\mir;I:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
@@ -194,7 +194,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="yapyjit.c" />
+    <ClCompile Include="ast_py2native.cpp" />
+    <ClCompile Include="gen_mir.cpp" />
+    <ClCompile Include="yapyjit.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\exc_conv.h" />
+    <ClInclude Include="..\include\mir_wrapper.h" />
+    <ClInclude Include="..\include\mpyo.h" />
+    <ClInclude Include="..\include\pyast.h" />
+    <ClInclude Include="..\include\enum.h" />
+    <ClInclude Include="..\include\ir.h" />
+    <ClInclude Include="..\include\yapyjit.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

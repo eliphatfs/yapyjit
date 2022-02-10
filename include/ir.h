@@ -143,7 +143,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
-		virtual void emit(MIRFunction* func, MIRModule* mod);
+		virtual void emit(Function* func);
 	};
 
 	class ConstantIns : public Instruction {
@@ -199,7 +199,9 @@ namespace yapyjit {
 		struct {
 			LabelIns* cont_pt, * break_pt;
 		} ctx;
+		// TODO: emit context is messy
 		std::unique_ptr<MIRFunction> emit_ctx;
+		std::vector<ManagedPyo> emit_keeprefs;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
 		Function(std::string _name) : name(_name), ctx() {}
 
