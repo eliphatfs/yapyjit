@@ -195,6 +195,7 @@ namespace yapyjit {
 				appender.new_insn(new CompareIns(
 					result, ops[i], comparators_res[i], comparators_res[i + 1]
 				));
+				if (i == ops.size() - 1) break;
 				appender.new_insn(new JumpTruthyIns(
 					lab_next.get(), result
 				));
@@ -410,6 +411,7 @@ namespace yapyjit {
 		std::unique_ptr<Function> emit_ir_f() {
 			auto result = std::make_unique<Function>(name, static_cast<int>(args.size()));
 			emit_ir(*result);
+			result->dce();
 			return std::move(result);
 		}
 	};
