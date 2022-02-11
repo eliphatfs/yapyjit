@@ -291,6 +291,14 @@ namespace yapyjit {
 		}
 	};
 
+	class Pass : public ASTWithTag<ASTTag::PASS> {
+	public:
+		Pass() {}
+		virtual int emit_ir(Function& appender) {
+			return -1;
+		}
+	};
+
 	class While : public ASTWithTag<ASTTag::WHILE> {
 	public:
 		std::unique_ptr<AST> test;

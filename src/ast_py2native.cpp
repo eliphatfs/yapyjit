@@ -164,7 +164,7 @@ namespace yapyjit {
 		TARGET(AnnAssign) {
 			auto val = ast_man.attr("value");
 			if (val == Py_None)
-				return nullptr;
+				return std::make_unique<Pass>();
 			std::vector<std::unique_ptr<AST>> targets;
 			targets.push_back(ast_py2native(ast_man.attr("target")));
 			return std::make_unique<Assign>(
@@ -172,10 +172,10 @@ namespace yapyjit {
 			);
 		}
 		TARGET(Pass) {
-			return nullptr;
+			return std::make_unique<Pass>();
 		}
 		TARGET(Assert) {
-			return nullptr;
+			return std::make_unique<Pass>();
 		}
 		TARGET(FunctionDef) {
 			auto result = std::make_unique<FuncDef>();
