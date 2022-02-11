@@ -207,6 +207,7 @@ namespace yapyjit {
 		// TODO: emit context is messy
 		std::unique_ptr<MIRFunction> emit_ctx;
 		std::vector<ManagedPyo> emit_keeprefs;
+		std::vector<char> fill_memory;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
 		Function(std::string _name, int nargs_) : name(_name), ctx(), nargs(nargs_) {}
 
@@ -217,6 +218,12 @@ namespace yapyjit {
 
 		void add_insn(std::unique_ptr<Instruction> insn) {
 			instructions.push_back(std::move(insn));
+		}
+
+		void* allocate_fill(size_t size) {
+			auto loc = fill_memory.size();
+			fill_memory.resize(loc + size);
+			return fill_memory.data() + loc;
 		}
 
 		void dce();

@@ -1,101 +1,9 @@
-#include <ir.h>
-#include <mir_wrapper.h>
+#include <gen_common.h>
+#include <gen_icache.h>
 // #include <mir_link.h>
 
 namespace yapyjit {
 	MIRContext mir_ctx = MIRContext();
-
-	inline MIRLabelOp emit_jump_if(MIRFunction* func, MIROp op64i) {
-		auto ret = func->new_label();
-		func->append_insn(MIR_BT, { ret, op64i });
-		return ret;
-	}
-
-	inline MIRLabelOp emit_jump_if_not(MIRFunction* func, MIROp op64i) {
-		auto ret = func->new_label();
-		func->append_insn(MIR_BF, { ret, op64i });
-		return ret;
-	}
-
-	inline void emit_newown(MIRFunction* func, MIRRegOp op) {
-		auto rc_pos = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_refcnt)>::t, op, offsetof(PyObject, ob_refcnt));
-		auto skip = emit_jump_if_not(func, op);
-		func->append_insn(MIR_ADD, { rc_pos, rc_pos, 1 });
-		func->append_label(skip);
-	}
-
-	inline void emit_1pyo_call_void(MIRFunction* func, MIROp addr, MIROp op) {
-		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(nullptr, { MIR_T_P }),
-			addr, op
-		});
-	}
-
-	inline void emit_disown(MIRFunction* func, MIRRegOp op) {
-		auto rc_pos = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_refcnt)>::t, op, offsetof(PyObject, ob_refcnt));
-		auto skip = emit_jump_if_not(func, op);
-		func->append_insn(MIR_SUB, { rc_pos, rc_pos, 1 });
-		auto skip_dealloc = emit_jump_if(func, rc_pos);
-		emit_1pyo_call_void(func, (int64_t)_Py_Dealloc, op);
-		func->append_label(skip_dealloc);
-		func->append_label(skip);
-		func->append_insn(MIR_MOV, { op, 0 });
-	}
-
-	inline void emit_1pyo_call(MIRFunction* func, MIROp addr, MIRRegOp ret, MIROp op, MIR_type_t ret_ty = MIR_T_P) {
-		emit_disown(func, ret);
-		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ret_ty, { MIR_T_P }),
-			addr, ret, op
-		});
-	}
-
-	inline void emit_2pyo_call(MIRFunction* func, MIROp addr, MIRRegOp ret, MIROp a, MIROp b, MIR_type_t ret_ty = MIR_T_P) {
-		emit_disown(func, ret);
-		auto ty = MIR_T_P;
-		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P }),
-			addr, ret, a, b
-		});
-	}
-
-	inline void emit_richcmp(MIRFunction* func, MIRRegOp ret, MIROp a, MIROp b, int op) {
-		emit_disown(func, ret);
-		auto ty = MIR_T_P;
-		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIRType<int>::t }),
-			(int64_t)PyObject_RichCompare, ret, a, b, op
-		});
-	}
-
-	inline void emit_3pyo_call(MIRFunction* func, MIROp addr, MIRRegOp ret, MIROp a, MIROp b, MIROp c, MIR_type_t ret_ty = MIR_T_P) {
-		emit_disown(func, ret);
-		auto ty = MIR_T_P;
-		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIR_T_P }),
-			addr, ret, a, b, c
-		});
-	}
-
-	void debug_print(PyObject* pyo) {
-		printf("\ndebug_print: object at %p\n", pyo);
-		PyObject_Print(pyo, stdout, 0);
-	}
-
-	inline void emit_debug_print_pyo(MIRFunction* func, MIROp prt) {
-		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(nullptr, { MIR_T_P }),
-			(intptr_t)debug_print, prt
-		});
-	}
-
-	inline MIRLabelOp ensure_label(Function * func, LabelIns * label) {
-		auto it = func->emit_label_map.find(label);
-		if (it != func->emit_label_map.end()) {
-			return it->second;
-		}
-		return func->emit_label_map.insert({ label, func->emit_ctx->new_label() }).first->second;
-	}
 
 	void LabelIns::emit(Function * func) {
 		func->emit_ctx->append_label(ensure_label(func, this));
@@ -123,6 +31,10 @@ namespace yapyjit {
 
 #define GEN_SIN(op, iop) case op: emit_1pyo_call(emit_ctx, (int64_t)iop, target, a); break;
 #define GEN_BIN(op, iop) case op: emit_2pyo_call(emit_ctx, (int64_t)iop, target, a, b); break;
+#define GEN_NB_BIN_ICACHED(op, opname, opslot, flbk) \
+	case op: \
+	emit_nb_binop_icached(func, target, a, b, nb_binop_with_resolve<flbk, offsetof(PyNumberMethods, opslot), opname[0], opname[1]>); \
+	break;
 #define GEN_CMP(op, iop) case op: emit_richcmp(emit_ctx, target, a, b, iop); break;
 
 	void BinOpIns::emit(Function* func) {
@@ -131,18 +43,18 @@ namespace yapyjit {
 		auto a = emit_ctx->get_reg(left);
 		auto b = emit_ctx->get_reg(right);
 		switch (op) {
-			GEN_BIN(Op2ary::Add, PyNumber_Add);
-			GEN_BIN(Op2ary::Sub, PyNumber_Subtract);
-			GEN_BIN(Op2ary::BitAnd, PyNumber_And);
-			GEN_BIN(Op2ary::BitOr, PyNumber_Or);
-			GEN_BIN(Op2ary::BitXor, PyNumber_Xor);
-			GEN_BIN(Op2ary::Div, PyNumber_TrueDivide);
-			GEN_BIN(Op2ary::FloorDiv, PyNumber_FloorDivide);
-			GEN_BIN(Op2ary::LShift, PyNumber_Lshift);
-			GEN_BIN(Op2ary::RShift, PyNumber_Rshift);
-			GEN_BIN(Op2ary::MatMult, PyNumber_MatrixMultiply);
-			GEN_BIN(Op2ary::Mod, PyNumber_Remainder);
-			GEN_BIN(Op2ary::Mult, PyNumber_Multiply);
+			GEN_NB_BIN_ICACHED(Op2ary::Add, "+", nb_add, SEQ_FALLBACK_CONCAT);
+			GEN_NB_BIN_ICACHED(Op2ary::Sub, "-", nb_subtract, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::BitAnd, "&", nb_and, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::BitOr, "|", nb_or, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::BitXor, "^", nb_xor, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::Div, "/", nb_true_divide, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::FloorDiv, "//", nb_floor_divide, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::LShift, "<<", nb_lshift, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::RShift, ">>", nb_rshift, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::MatMult, "@", nb_matrix_multiply, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::Mod, "%", nb_remainder, 0);
+			GEN_NB_BIN_ICACHED(Op2ary::Mult, "*", nb_multiply, SEQ_FALLBACK_REPEAT);
 		case Op2ary::Pow:
 			emit_3pyo_call(emit_ctx, (int64_t)PyNumber_Power, target, a, b, (int64_t)Py_None); break;
 			break;
