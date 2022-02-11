@@ -27,16 +27,16 @@ def relu2(n):
     return n if n >= 0 else 0
 
 
+def verify(s):
+    assert s == 4999950000
+
+
 def sum1n(n):
     i = 1
     s = 0
-    while i:
+    while i < n:
         s += i
         i += 1
-        if i > n:
-            break
-    else:
-        i = 0
     return s
 
 
@@ -48,6 +48,10 @@ def fib(n):
 
 def call():
     return range(2)
+
+
+def attributed():
+    return 2
 
 
 input("Press Enter to start...")
@@ -70,11 +74,22 @@ assert relu(2.4) == relu2(2.4) == yapyjit.jit(relu)(2.4) == yapyjit.jit(relu2)(2
 print("relu(2.4) == relu2(2.4) == yapyjit.jit(relu)(2.4) == yapyjit.jit(relu2)(2.4)")
 assert sum1n(10) == yapyjit.jit(sum1n)(10)
 print("sum1n(10) == yapyjit.jit(sum1n)(10)")
-jitted = yapyjit.jit(call)
-# jitted.mir("call.mir")
-assert call() == jitted()
+assert call() == yapyjit.jit(call)()
 print("call() == yapyjit.jit(call)()")
 # yapyjit.jit(fib).mir("fib.mir")
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
 fib = yapyjit.jit(fib)
-print("jitted fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
+print("jitted fib:", timeit.timeit(
+    "fib(18)",
+    globals=globals(), number=100
+))
+print("original sum:", timeit.timeit("sum1n(100000)", globals=globals(), number=100))
+sum1n = yapyjit.jit(sum1n)
+print("jitted sum:", timeit.timeit(
+    "sum1n(100000)",
+    globals=globals(), number=100
+))
+print("fast sum:", timeit.timeit("sum(range(100000))", globals=globals(), number=100))
+attributed.c = 1
+assert attributed() == 2
+assert attributed.c == 1

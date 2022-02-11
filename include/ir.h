@@ -50,6 +50,7 @@ namespace yapyjit {
 		virtual ~Instruction() = default;
 		virtual std::string pretty_print() = 0;
 		virtual void emit(Function* func) = 0;
+		virtual bool control_leaves() { return false; }
 	};
 
 	// Empty nop instruction designated for use as labels
@@ -69,6 +70,7 @@ namespace yapyjit {
 			return "ret $" + std::to_string(src);
 		}
 		virtual void emit(Function* func);
+		virtual bool control_leaves() { return true; }
 	};
 
 	class MoveIns : public Instruction {
@@ -133,13 +135,15 @@ namespace yapyjit {
 			return "jmp " + target->pretty_print();
 		}
 		virtual void emit(Function* func);
+		virtual bool control_leaves() { return true; }
 	};
 
-	class JumpTruthyIns : public JumpIns {
+	class JumpTruthyIns : public Instruction {
 	public:
+		LabelIns* target;
 		int cond;
 		JumpTruthyIns(LabelIns* target_, int cond_local_id)
-			: JumpIns(target_), cond(cond_local_id) {}
+			: target(target_), cond(cond_local_id) {}
 		virtual std::string pretty_print() {
 			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
@@ -214,5 +218,7 @@ namespace yapyjit {
 		void add_insn(std::unique_ptr<Instruction> insn) {
 			instructions.push_back(std::move(insn));
 		}
+
+		void dce();
 	};
 };

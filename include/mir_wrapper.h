@@ -224,8 +224,8 @@ public:
 	MIR_context_t ctx;
 	MIRContext(): ctx(MIR_init()) {
 		MIR_gen_init(ctx, 1);
-		// MIR_gen_set_debug_file(ctx, 0, fopen("mir-buggy.log", "w"));
-		MIR_gen_set_optimize_level(ctx, 0, 1);  // mir issue #253
+		// MIR_gen_set_debug_file(ctx, 0, fopen("mir.log", "w"));
+		MIR_gen_set_optimize_level(ctx, 0, 2);  // mir issue #253
 		MIR_set_error_func(ctx, mir_error);
 	}
 
