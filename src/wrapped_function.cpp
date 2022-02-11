@@ -7,6 +7,7 @@ typedef struct {
     PyObject* wrapped;
     std::unique_ptr<yapyjit::Function> compiled;
     MIR_item_t generated;
+    PyObject* extattrdict;
 } WrappedFunctionObject;
 
 static void
@@ -98,6 +99,7 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_init = (initproc)yapyjit::guarded<(PyCFunction)wf_init>;
     wf_type.tp_dealloc = (destructor)wf_dealloc;
     wf_type.tp_members = wf_members;
+    wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extattrdict);
     wf_type.tp_methods = wf_methods;
     wf_type.tp_call = (ternaryfunc)wf_call;
 
