@@ -161,6 +161,40 @@ namespace yapyjit {
 		}
 	}
 
+	PyObject* pyo_is_obj(PyObject* a, PyObject* b) {
+		if (a == b) Py_RETURN_TRUE;
+		Py_RETURN_FALSE;
+	}
+
+	PyObject* pyo_is_not_obj(PyObject* a, PyObject* b) {
+		if (a == b) Py_RETURN_FALSE;
+		Py_RETURN_TRUE;
+	}
+
+	PyObject* pyo_in_obj(PyObject* a, PyObject* b) {
+		switch (PySequence_Contains(b, a))
+		{
+		case 1:
+			Py_RETURN_TRUE;
+		case 0:
+			Py_RETURN_FALSE;
+		default:
+			return nullptr;
+		}
+	}
+
+	PyObject* pyo_not_in_obj(PyObject* a, PyObject* b) {
+		switch (PySequence_Contains(b, a))
+		{
+		case 1:
+			Py_RETURN_FALSE;
+		case 0:
+			Py_RETURN_TRUE;
+		default:
+			return nullptr;
+		}
+	}
+
 	void UnaryOpIns::emit(Function* func) {
 		auto emit_ctx = func->emit_ctx.get();
 		auto target = emit_ctx->get_reg(dst);
@@ -185,6 +219,10 @@ namespace yapyjit {
 			GEN_CMP(OpCmp::Lt, Py_LT);
 			GEN_CMP(OpCmp::LtE, Py_LE);
 			GEN_CMP(OpCmp::NotEq, Py_NE);
+			GEN_BIN(OpCmp::Is, pyo_is_obj);
+			GEN_BIN(OpCmp::IsNot, pyo_is_not_obj);
+			GEN_BIN(OpCmp::In, pyo_in_obj);
+			GEN_BIN(OpCmp::NotIn, pyo_not_in_obj);
 		}
 	}
 

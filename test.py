@@ -40,6 +40,14 @@ def sum1n(n):
     return s
 
 
+def seq(a, seq):
+    if a is seq:
+        return 100
+    if a is not None:
+        return a in seq
+    return 200
+
+
 def fib(n):
     if n <= 1:
         return n
@@ -76,13 +84,22 @@ assert sum1n(10) == yapyjit.jit(sum1n)(10)
 print("sum1n(10) == yapyjit.jit(sum1n)(10)")
 assert call() == yapyjit.jit(call)()
 print("call() == yapyjit.jit(call)()")
+assert seq(100, [100]) == yapyjit.jit(seq)(100, [100])
+assert seq(100, []) == yapyjit.jit(seq)(100, [])
+assert seq([], []) == yapyjit.jit(seq)([], [])
+assert seq(100, (100,)) == yapyjit.jit(seq)(100, (100,))
+assert seq(10, 10) == yapyjit.jit(seq)(10, 10)
+assert seq(None, []) == yapyjit.jit(seq)(None, [])
+print("is, is not, in, not in all passed")
 # yapyjit.jit(fib).mir("fib.mir")
+print("compilation time of fib:", timeit.timeit("yapyjit.jit(fib)", globals=globals(), number=100) / 100)
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
 fib = yapyjit.jit(fib)
 print("jitted fib:", timeit.timeit(
     "fib(18)",
     globals=globals(), number=100
 ))
+print("compilation time of sum:", timeit.timeit("yapyjit.jit(sum1n)", globals=globals(), number=100) / 100)
 print("original sum:", timeit.timeit("sum1n(100000)", globals=globals(), number=100))
 sum1n = yapyjit.jit(sum1n)
 print("jitted sum:", timeit.timeit(
