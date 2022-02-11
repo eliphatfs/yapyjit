@@ -174,10 +174,11 @@ public:
 	MIRRefOp new_proto(
 		MIR_type_t* ret_type_optional, std::initializer_list<MIR_type_t> args, bool variadic = false
 	) {
+		static std::vector<std::string> argv;
 		std::string name = "_yapyjit_proto_" + std::to_string(proto_cnt++);
-		std::vector<std::string> argv;
-		std::vector<MIR_var> v;
-		for (size_t i = 0; i < args.size(); i++) argv.push_back("a" + std::to_string(i));
+		std::vector<MIR_var_t> v;
+		for (size_t i = argv.size(); i < args.size(); i++) argv.push_back("a" + std::to_string(i));
+		// mir issue #252
 		for (size_t i = 0; i < args.size(); i++) v.push_back({ args.begin()[i], argv[i].c_str() });
 		return (variadic ? MIR_new_vararg_proto_arr : MIR_new_proto_arr)(
 			ctx, name.c_str(),
@@ -223,8 +224,8 @@ public:
 	MIR_context_t ctx;
 	MIRContext(): ctx(MIR_init()) {
 		MIR_gen_init(ctx, 1);
-		// MIR_gen_set_debug_file(ctx, 0, fopen("mir.log", "w"));
-		MIR_gen_set_optimize_level(ctx, 0, 3);
+		// MIR_gen_set_debug_file(ctx, 0, fopen("mir-buggy.log", "w"));
+		MIR_gen_set_optimize_level(ctx, 0, 1);  // mir issue #253
 		MIR_set_error_func(ctx, mir_error);
 	}
 
