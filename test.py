@@ -1,4 +1,5 @@
 import yapyjit
+import timeit
 
 
 def trivial():
@@ -74,7 +75,6 @@ jitted = yapyjit.jit(call)
 assert call() == jitted()
 print("call() == yapyjit.jit(call)()")
 # yapyjit.jit(fib).mir("fib.mir")
-res = fib(10)
+print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
 fib = yapyjit.jit(fib)
-assert fib(10) == res
-print("fib(10) == yapyjit.jit(fib)(10)")
+print("jitted fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
