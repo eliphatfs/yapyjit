@@ -227,7 +227,6 @@ namespace yapyjit {
 		emit_2pyo_call(
 			emit_ctx, (int64_t)PyDict_GetItem, target, (int64_t)glob, (int64_t)hash_cache
 		);
-		emit_newown(emit_ctx, target);
 
 		// Assume builtins will not change.
 		auto blt_get = PyDict_GetItem(blt, hash_cache);
@@ -239,6 +238,7 @@ namespace yapyjit {
 			});
 			emit_ctx->append_label(skip_blt);
 		}
+		emit_newown(emit_ctx, target);
 	}
 
 	
