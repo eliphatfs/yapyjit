@@ -193,13 +193,20 @@ namespace yapyjit {
 		emit_newown(emit_ctx, target);
 	}
 
-	
+	PyObject* _call_resolver(PyObject* callee, PyObject* args, PyObject* kwargs, ternaryfunc* resolved) {
+		// TODO: don't forget to check recursion limit when exception is supported
+		auto tpcall = Py_TYPE(callee)->tp_call;
+		if (tpcall) {
+			*resolved = *tpcall;
+			return (*tpcall)(callee, args, kwargs);
+		}
+		return nullptr;
+	}
 
 	void CallIns::emit(Function* ctx) {
 		auto emit_ctx = ctx->emit_ctx.get();
 		auto target = ctx->emit_ctx->get_reg(dst);
 		auto pyfn = ctx->emit_ctx->get_reg(func);
-		emit_disown(emit_ctx, target);
 
 		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size());
 		if (!tuple_fill) throw registered_pyexc();
@@ -217,10 +224,9 @@ namespace yapyjit {
 		}
 		// emit_debug_print_pyo(emit_ctx, pyfn);
 		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
-		emit_ctx->append_insn(MIR_CALL, {
-			emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
-			(int64_t)PyObject_CallObject, target, pyfn, (int64_t)tuple_fill
-		});
+		emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
+			ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)nullptr
+		);
 
 		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
 			emit_ctx->append_insn(MIR_MOV, {
