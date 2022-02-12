@@ -33,8 +33,11 @@ namespace yapyjit {
 #define GEN_BIN(op, iop) case op: emit_2pyo_call(emit_ctx, (int64_t)iop, target, a, b); break;
 #define GEN_NB_BIN_ICACHED(op, opname, opslot, flbk) \
 	case op: \
-	emit_nb_binop_icached(func, target, a, b, nb_binop_with_resolve<flbk, offsetof(PyNumberMethods, opslot), opname[0], opname[1]>); \
-	break;
+	emit_call_icached<2, PyObject*, PyObject*, PyObject*>(\
+		func, \
+		nb_binop_with_resolve<flbk, offsetof(PyNumberMethods, opslot), opname[0], opname[1]>,\
+		{a, b}, target, a, b\
+	); break;
 #define GEN_CMP(op, iop) case op: emit_richcmp(emit_ctx, target, a, b, iop); break;
 
 	void BinOpIns::emit(Function* func) {
@@ -143,10 +146,9 @@ namespace yapyjit {
 	}
 
 	void JumpTruthyIns::emit(Function* func) {
-		auto ty = MIRType<int>::t;
 		auto ret = func->emit_ctx->new_temp_reg(MIR_T_I64);
 		func->emit_ctx->append_insn(MIR_CALL, {
-			func->emit_ctx->parent->new_proto(&ty, { MIR_T_P }),
+			func->emit_ctx->parent->new_proto(MIRType<int>::t, { MIR_T_P }),
 			(int64_t)PyObject_IsTrue, ret, func->emit_ctx->get_reg(cond)
 		});
 		func->emit_ctx->append_insn(MIR_BT, { ensure_label(func, target), ret });
@@ -215,9 +217,8 @@ namespace yapyjit {
 		}
 		// emit_debug_print_pyo(emit_ctx, pyfn);
 		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
-		auto ty = MIR_T_P;
 		emit_ctx->append_insn(MIR_CALL, {
-			emit_ctx->parent->new_proto(&ty, { MIR_T_P, MIR_T_P }),
+			emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_CallObject, target, pyfn, (int64_t)tuple_fill
 		});
 

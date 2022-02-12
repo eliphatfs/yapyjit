@@ -46,6 +46,9 @@ template<> struct MIRType<long long> : SizedMIRInt<sizeof(long long)> {};
 template<> struct MIRType<float> : SizedMIRFloat<sizeof(float)> {};
 template<> struct MIRType<double> : SizedMIRFloat<sizeof(double)> {};
 
+template<typename Tp> struct MIRType<Tp*> : _const_mir_ty<MIR_T_P> {};
+template<> struct MIRType<void> : _const_mir_ty<MIR_T_BOUND> {};
+
 class MIRLabelOp : public MIROp {
 public:
 	MIRLabelOp(MIR_label_t label) : MIROp(MIR_new_label_op(nullptr, label)) {}
@@ -134,16 +137,6 @@ public:
 		));
 	}
 
-	void append_insn(MIR_insn_code_t code, std::initializer_list<MIROp> Ops) {
-		std::vector<MIR_op_t> v;
-		for (const auto& op : Ops) {
-			v.push_back(op.op);
-		}
-		MIR_append_insn(ctx, func, MIR_new_insn_arr(
-			ctx, code, Ops.size(), v.data()
-		));
-	}
-
 	~MIRFunction() {
 		MIR_finish_func(ctx);
 	}
@@ -172,7 +165,7 @@ public:
 	}
 
 	MIRRefOp new_proto(
-		MIR_type_t* ret_type_optional, std::initializer_list<MIR_type_t> args, bool variadic = false
+		MIR_type_t ret_type_or_bound, std::initializer_list<MIR_type_t> args, bool variadic = false
 	) {
 		static std::vector<std::string> argv;
 		std::string name = "_yapyjit_proto_" + std::to_string(proto_cnt++);
@@ -182,7 +175,7 @@ public:
 		for (size_t i = 0; i < args.size(); i++) v.push_back({ args.begin()[i], argv[i].c_str() });
 		return (variadic ? MIR_new_vararg_proto_arr : MIR_new_proto_arr)(
 			ctx, name.c_str(),
-			ret_type_optional ? 1 : 0, ret_type_optional,
+			ret_type_or_bound == MIR_T_BOUND ? 0 : 1, &ret_type_or_bound,
 			args.size(),
 			v.data()
 		);

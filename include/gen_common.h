@@ -24,7 +24,7 @@ namespace yapyjit {
 
 	inline void emit_1pyo_call_void(MIRFunction* func, MIROp addr, MIROp op) {
 		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(nullptr, { MIR_T_P }),
+			func->parent->new_proto(MIRType<void>::t, { MIR_T_P }),
 			addr, op
 		});
 	}
@@ -43,34 +43,31 @@ namespace yapyjit {
 	inline void emit_1pyo_call(MIRFunction* func, MIROp addr, MIRRegOp ret, MIROp op, MIR_type_t ret_ty = MIR_T_P) {
 		emit_disown(func, ret);
 		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ret_ty, { MIR_T_P }),
+			func->parent->new_proto(ret_ty, { MIR_T_P }),
 			addr, ret, op
 		});
 	}
 
 	inline void emit_2pyo_call(MIRFunction* func, MIROp addr, MIRRegOp ret, MIROp a, MIROp b, MIR_type_t ret_ty = MIR_T_P) {
 		emit_disown(func, ret);
-		auto ty = MIR_T_P;
 		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P }),
+			func->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
 			addr, ret, a, b
 		});
 	}
 
 	inline void emit_richcmp(MIRFunction* func, MIRRegOp ret, MIROp a, MIROp b, int op) {
 		emit_disown(func, ret);
-		auto ty = MIR_T_P;
 		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIRType<int>::t }),
+			func->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P, MIRType<int>::t }),
 			(int64_t)PyObject_RichCompare, ret, a, b, op
 		});
 	}
 
 	inline void emit_3pyo_call(MIRFunction* func, MIROp addr, MIRRegOp ret, MIROp a, MIROp b, MIROp c, MIR_type_t ret_ty = MIR_T_P) {
 		emit_disown(func, ret);
-		auto ty = MIR_T_P;
 		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			func->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P, MIR_T_P }),
 			addr, ret, a, b, c
 		});
 	}
@@ -82,7 +79,7 @@ namespace yapyjit {
 
 	inline void emit_debug_print_pyo(MIRFunction* func, MIROp prt) {
 		func->append_insn(MIR_CALL, {
-			func->parent->new_proto(nullptr, { MIR_T_P }),
+			func->parent->new_proto(MIRType<void>::t, { MIR_T_P }),
 			(intptr_t)debug_print, prt
 		});
 	}

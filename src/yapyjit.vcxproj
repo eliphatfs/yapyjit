@@ -149,6 +149,7 @@
       <RuntimeLibrary Condition="$(PythonCoreDVersion) == ''">MultithreadedDLL</RuntimeLibrary>
       <AdditionalIncludeDirectories>I:\ScarletX\yapyjit\mir;I:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
+      <LanguageStandard>Default</LanguageStandard>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>

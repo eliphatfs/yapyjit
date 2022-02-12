@@ -4,6 +4,7 @@
 #include <ir.h>
 #include <exc_helper.h>
 #include <gen_common.h>
+#include <array>
 
 #define NB_BINOP(nb_methods, slot) \
         (*(binaryfunc*)(& ((char*)nb_methods)[slot]))
@@ -11,6 +12,12 @@
         (*(ternaryfunc*)(& ((char*)nb_methods)[slot]))
 
 namespace yapyjit {
+    template<typename retT, typename ...argT>
+    using FuncT = retT(*)(argT...);
+
+    template<typename retT, typename ...argT>
+    using ResolverT = retT(*)(argT..., FuncT<retT, argT...>*);
+
     inline PyObject* pyo_sequence_repeat_obj(PyObject* seq, PyObject* n) {
         Py_ssize_t count;
         if (PyIndex_Check(n)) {
@@ -31,7 +38,6 @@ namespace yapyjit {
     }
     #define SEQ_FALLBACK_CONCAT 1
     #define SEQ_FALLBACK_REPEAT 2
-    typedef PyObject* (*binop_resolver_t)(PyObject*, PyObject*, binaryfunc*);
     template<int seq_fallback_flags, int op_slot, char opn1, char opn2>
 	PyObject* nb_binop_with_resolve(PyObject* v, PyObject* w, binaryfunc* resolved) {
         // printf("icache miss\n"); fflush(stdout);
@@ -103,40 +109,60 @@ namespace yapyjit {
         return binop_type_error(v, w, op_name);
 	}
 
-    typedef struct {
-        // Maybe unsound under corner cases where callsite
-        // of a type is changed into a subtype AND subtype
-        // is incompatible with original operation.
-        // If that really happens, place back the cache type checks.
-        // void* ty_a;
-        // void* ty_b;
+    template<int nargs>
+    struct icache_t {
+        void* ty[nargs];
         void* addr;
-    } binop_icache_t;
+    };
 
     static PyObject* const_fun_notimpl() {
         Py_RETURN_NOTIMPLEMENTED;
     }
 
-    inline void emit_nb_binop_icached(Function* func, MIRRegOp ret, MIRRegOp a, MIRRegOp b, binop_resolver_t resolver) {
+    template<typename argT>
+    using _mir_op_type = MIROp;
+
+    template<size_t ncheck, typename retT, typename ...argT>
+    inline void emit_call_icached(
+        Function* func, ResolverT<retT, argT...> resolver,
+        std::array<MIRRegOp, ncheck> tyck,
+        MIRRegOp ret,
+        _mir_op_type<argT>... args
+    ) {
         auto emit_ctx = func->emit_ctx.get();
         emit_disown(emit_ctx, ret);
-        auto icache_fill = (binop_icache_t*)func->allocate_fill(sizeof(binop_icache_t));
-        icache_fill->addr = const_fun_notimpl;
+        auto icache_fill = (icache_t<ncheck>*)func->allocate_fill(sizeof(icache_t<ncheck>));
 
+        auto resolve_label = emit_ctx->new_label();
+        auto end_label = emit_ctx->new_label();
         auto cache_addr = MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)&icache_fill->addr);
 
-        auto ty = MIR_T_P;
+        for (size_t i = 0; i < ncheck; i++) {
+            emit_ctx->append_insn(MIR_BNE, {
+                resolve_label,
+                MIRMemOp(MIR_T_P, MIRRegOp(0), (int64_t)&icache_fill->ty[i]),
+                MIRMemOp(MIR_T_P, tyck[i], offsetof(PyObject, ob_type))
+            });
+        }
         emit_ctx->append_insn(MIR_CALL, {
-            emit_ctx->parent->new_proto(&ty, { MIR_T_P, MIR_T_P }),
-            cache_addr, ret, a, b
+            emit_ctx->parent->new_proto(MIRType<retT>::t, {
+                MIRType<argT>::t...
+            }),
+            cache_addr, ret, args...
         });
-        auto end_label = emit_ctx->new_label();
-        emit_ctx->append_insn(MIR_BNE, { end_label, ret, (intptr_t)Py_NotImplemented });
-
-        emit_disown(emit_ctx, ret);
+        emit_ctx->append_insn(MIR_JMP, { end_label });
+        emit_ctx->append_label(resolve_label);
+        for (size_t i = 0; i < ncheck; i++) {
+            emit_ctx->append_insn(MIR_MOV, {
+                MIRMemOp(MIR_T_P, MIRRegOp(0), (int64_t)&icache_fill->ty[i]),
+                MIRMemOp(MIR_T_P, tyck[i], offsetof(PyObject, ob_type))
+            });
+        }
         emit_ctx->append_insn(MIR_CALL, {
-            emit_ctx->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIR_T_P }),
-            (intptr_t)resolver, ret, a, b, (intptr_t)&icache_fill->addr
+            emit_ctx->parent->new_proto(MIRType<retT>::t, {
+                MIRType<argT>::t..., MIR_T_P
+            }),
+            (intptr_t)resolver, ret, args..., (intptr_t)&icache_fill->addr
         });
         emit_ctx->append_label(end_label);
     }
