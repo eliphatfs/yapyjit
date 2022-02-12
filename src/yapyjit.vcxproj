@@ -196,10 +196,15 @@
   <ItemGroup>
     <ClCompile Include="ast_py2native.cpp" />
     <ClCompile Include="gen_mir.cpp" />
+    <ClCompile Include="ir_opt.cpp" />
+    <ClCompile Include="wrapped_function.cpp" />
     <ClCompile Include="yapyjit.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\exc_conv.h" />
+    <ClInclude Include="..\include\exc_helper.h" />
+    <ClInclude Include="..\include\gen_common.h" />
+    <ClInclude Include="..\include\gen_icache.h" />
     <ClInclude Include="..\include\mir_wrapper.h" />
     <ClInclude Include="..\include\mpyo.h" />
     <ClInclude Include="..\include\pyast.h" />

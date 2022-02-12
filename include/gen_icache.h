@@ -104,31 +104,26 @@ namespace yapyjit {
 	}
 
     typedef struct {
-        void* ty_a;
-        void* ty_b;
+        // Maybe unsound under corner cases where callsite
+        // of a type is changed into a subtype AND subtype
+        // is incompatible with original operation.
+        // If that really happens, place back the cache type checks.
+        // void* ty_a;
+        // void* ty_b;
         void* addr;
     } binop_icache_t;
+
+    static PyObject* const_fun_notimpl() {
+        Py_RETURN_NOTIMPLEMENTED;
+    }
 
     inline void emit_nb_binop_icached(Function* func, MIRRegOp ret, MIRRegOp a, MIRRegOp b, binop_resolver_t resolver) {
         auto emit_ctx = func->emit_ctx.get();
         emit_disown(emit_ctx, ret);
         auto icache_fill = (binop_icache_t*)func->allocate_fill(sizeof(binop_icache_t));
-        icache_fill->ty_a = icache_fill->ty_b = nullptr;
+        icache_fill->addr = const_fun_notimpl;
 
-        auto resolve_label = emit_ctx->new_label();
         auto cache_addr = MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)&icache_fill->addr);
-
-        auto ty_a = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_type)>::t, a, offsetof(PyObject, ob_type));
-        auto ty_b = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_type)>::t, b, offsetof(PyObject, ob_type));
-        auto cached_ty_a = MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)&icache_fill->ty_a);
-        auto cached_ty_b = MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)&icache_fill->ty_b);
-
-        emit_ctx->append_insn(MIR_BNE, {
-            resolve_label, cached_ty_a, ty_a
-        });
-        emit_ctx->append_insn(MIR_BNE, {
-            resolve_label, cached_ty_b, ty_b
-        });
 
         auto ty = MIR_T_P;
         emit_ctx->append_insn(MIR_CALL, {
@@ -136,12 +131,9 @@ namespace yapyjit {
             cache_addr, ret, a, b
         });
         auto end_label = emit_ctx->new_label();
-        emit_ctx->append_insn(MIR_JMP, { end_label });
+        emit_ctx->append_insn(MIR_BNE, { end_label, ret, (intptr_t)Py_NotImplemented });
 
-        emit_ctx->append_label(resolve_label);
-
-        emit_ctx->append_insn(MIR_MOV, { cached_ty_a, ty_a });
-        emit_ctx->append_insn(MIR_MOV, { cached_ty_b, ty_b });
+        emit_disown(emit_ctx, ret);
         emit_ctx->append_insn(MIR_CALL, {
             emit_ctx->parent->new_proto(&ty, { MIR_T_P, MIR_T_P, MIR_T_P }),
             (intptr_t)resolver, ret, a, b, (intptr_t)&icache_fill->addr
