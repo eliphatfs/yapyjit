@@ -5,8 +5,8 @@ Assign	1		BinOp	1
 AugAssign	P		UnaryOp	1
 AnnAssign	1		Lambda	
 For	1		IfExp	1
-While	1		Dict	
-If	1		Set	
+While	1		Dict	1
+If	1		Set	1
 With			ListComp	
 Raise			SetComp	
 Try			DictComp	
@@ -22,5 +22,5 @@ Continue	1		Subscript
 			Starred	
 			Name	P
 			List	
-			Tuple	
-			Slice	
+			Tuple	P
+			Slice	P

@@ -69,6 +69,10 @@ def attributed():
     return 2
 
 
+def container_build():
+    return [1, 2], 3, 4, {5, 6}, {7: 8}
+
+
 input("Press Enter to start...")
 for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib]:
     print(func.__name__)
@@ -100,6 +104,8 @@ assert seq(100, (100,)) == yapyjit.jit(seq)(100, (100,))
 assert seq(10, 10) == yapyjit.jit(seq)(10, 10)
 assert seq(None, []) == yapyjit.jit(seq)(None, [])
 print("is, is not, in, not in all passed")
+assert container_build() == yapyjit.jit(container_build)()
+print("container_build() == yapyjit.jit(container_build)()")
 # yapyjit.jit(fib).mir("fib.mir")
 print("compilation time of fib:", timeit.timeit("yapyjit.jit(fib)", globals=globals(), number=100) / 100)
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))

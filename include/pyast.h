@@ -23,10 +23,12 @@ namespace yapyjit {
 	BETTER_ENUM(
 		ASTTag, int,
 		NAME = 1,
+		LIST, TUPLE,
 		BOOLOP,
 		BINOP,
 		UNARYOP,
 		IFEXP,
+		DICT, SET,
 		COMPARE,
 		CALL,
 		CONST,
@@ -171,6 +173,63 @@ namespace yapyjit {
 			appender.add_insn(std::move(lab_e));
 			return result;
 		}
+	};
+
+	class Dict : public ASTWithTag<ASTTag::DICT> {
+	public:
+		std::vector<std::unique_ptr<AST>> keys;
+		std::vector<std::unique_ptr<AST>> values;
+		Dict(std::vector<std::unique_ptr<AST>>& keys_, std::vector<std::unique_ptr<AST>>& values_)
+			: keys(std::move(keys_)), values(std::move(values_)) {
+			assert(keys.size() == values.size());
+		}
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			auto ins = new BuildIns(
+				result, BuildInsMode::DICT
+			);
+			for (size_t i = 0; i < keys.size(); i++) {
+				ins->args.push_back(keys[i]->emit_ir(appender));
+				ins->args.push_back(values[i]->emit_ir(appender));
+			}
+			appender.new_insn(ins);
+			return result;
+		}
+	};
+
+	template<int T_build_mode, int T_tag>
+	class Buildable1D : public ASTWithTag<T_tag> {
+	public:
+		std::vector<std::unique_ptr<AST>> elts;
+		Buildable1D(std::vector<std::unique_ptr<AST>>& elts_)
+			: elts(std::move(elts_)) {
+		}
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			auto ins = new BuildIns(
+				result, BuildInsMode::_from_integral(T_build_mode)
+			);
+			for (size_t i = 0; i < elts.size(); i++) {
+				ins->args.push_back(elts[i]->emit_ir(appender));
+			}
+			appender.new_insn(ins);
+			return result;
+		}
+	};
+
+	class List : public Buildable1D<BuildInsMode::LIST, ASTTag::LIST> {
+	public:
+		List(std::vector<std::unique_ptr<AST>>& elts_) : Buildable1D(elts_) {}
+	};
+
+	class Tuple : public Buildable1D<BuildInsMode::TUPLE, ASTTag::TUPLE> {
+	public:
+		Tuple(std::vector<std::unique_ptr<AST>>& elts_) : Buildable1D(elts_) {}
+	};
+
+	class Set : public Buildable1D<BuildInsMode::SET, ASTTag::SET> {
+	public:
+		Set(std::vector<std::unique_ptr<AST>>& elts_) : Buildable1D(elts_) {}
 	};
 
 	class Compare : public ASTWithTag<ASTTag::COMPARE> {

@@ -50,6 +50,33 @@ namespace yapyjit {
 				ast_py2native(ast_man.attr("orelse"))
 			);
 		}
+		TARGET(Dict) {
+			std::vector<std::unique_ptr<AST>> keys{};
+			std::vector<std::unique_ptr<AST>> values{};
+			for (auto val : ast_man.attr("keys"))
+				keys.push_back(ast_py2native(val));
+			for (auto val : ast_man.attr("values"))
+				values.push_back(ast_py2native(val));
+			return std::make_unique<Dict>(keys, values);
+		}
+		TARGET(List) {
+			std::vector<std::unique_ptr<AST>> elts{};
+			for (auto val : ast_man.attr("elts"))
+				elts.push_back(ast_py2native(val));
+			return std::make_unique<List>(elts);
+		}
+		TARGET(Set) {
+			std::vector<std::unique_ptr<AST>> elts{};
+			for (auto val : ast_man.attr("elts"))
+				elts.push_back(ast_py2native(val));
+			return std::make_unique<Set>(elts);
+		}
+		TARGET(Tuple) {
+			std::vector<std::unique_ptr<AST>> elts{};
+			for (auto val : ast_man.attr("elts"))
+				elts.push_back(ast_py2native(val));
+			return std::make_unique<Tuple>(elts);
+		}
 		TARGET(Compare) {
 			std::vector<OpCmp> ops{};
 			for (auto op : ast_man.attr("ops")) {

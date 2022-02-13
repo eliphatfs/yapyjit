@@ -165,6 +165,31 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	BETTER_ENUM(
+		BuildInsMode,
+		int,
+		DICT = 1, LIST, SET, TUPLE
+	)
+
+	class BuildIns : public Instruction {
+	public:
+		BuildInsMode mode;
+		int dst;
+		std::vector<int> args;
+		BuildIns(int dst_local_id, BuildInsMode mode_)
+			: dst(dst_local_id), mode(mode_) {
+		}
+		virtual std::string pretty_print() {
+			std::string res = "build $" + std::to_string(dst) + " <-" + mode._to_string()  + "(";
+			for (size_t i = 0; i < args.size(); i++) {
+				if (i != 0) res += ", ";
+				res += "$" + std::to_string(args[i]);
+			}
+			return res + ")";
+		}
+		virtual void emit(Function* func);
+	};
+
 	class ConstantIns : public Instruction {
 	public:
 		int dst;

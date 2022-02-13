@@ -164,6 +164,87 @@ namespace yapyjit {
 		func->emit_ctx->append_insn(MIR_BF, { ensure_label(func, iterFailTo), target });
 	}
 
+	void BuildIns::emit(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		auto target = func->emit_ctx->get_reg(dst);
+		size_t i;
+		emit_disown(func->emit_ctx.get(), target);
+		switch (mode) {
+		case BuildInsMode::DICT:
+			emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIR_T_P, {}),
+				(int64_t)PyDict_New, target
+			});
+			for (i = 0; i < args.size(); i += 2) {
+				emit_ctx->append_insn(MIR_CALL, {
+					func->emit_ctx->parent->new_proto(MIRType<void>::t, {
+						MIR_T_P, MIR_T_P, MIR_T_P
+					}),
+					(int64_t)PyDict_SetItem, target,
+					emit_ctx->get_reg(args[i]),
+					emit_ctx->get_reg(args[i + 1])
+				});
+			}
+			break;
+		case BuildInsMode::SET:
+			emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P }),
+				(int64_t)PySet_New, target, (int64_t)nullptr
+			});
+			for (i = 0; i < args.size(); i++) {
+				emit_ctx->append_insn(MIR_CALL, {
+					func->emit_ctx->parent->new_proto(MIRType<void>::t, {
+						MIR_T_P, MIR_T_P
+					}),
+					(int64_t)PySet_Add, target,
+					emit_ctx->get_reg(args[i])
+				});
+			}
+			break;
+		case BuildInsMode::TUPLE:
+			emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIR_T_P, { SizedMIRInt<sizeof(Py_ssize_t)>::t }),
+				(int64_t)PyTuple_New,
+				target, args.size()
+			});
+			for (i = 0; i < args.size(); i++) {
+				emit_newown(emit_ctx, emit_ctx->get_reg(args[i]));
+				emit_ctx->append_insn(MIR_MOV, {
+					MIRMemOp(
+						MIR_T_P, target,
+						offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
+					),
+					emit_ctx->get_reg(args[i])
+				});
+			}
+			break;
+		case BuildInsMode::LIST:
+			emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIR_T_P, { SizedMIRInt<sizeof(Py_ssize_t)>::t }),
+				(int64_t)PyList_New,
+				target, args.size()
+			});
+			auto temp_reg = emit_ctx->new_temp_reg(MIR_T_I64);
+			emit_ctx->append_insn(MIR_MOV, {
+				temp_reg,
+				MIRMemOp(
+					MIR_T_P, target,
+					offsetof(PyListObject, ob_item)
+				)
+			});
+			for (i = 0; i < args.size(); i++) {
+				emit_newown(emit_ctx, emit_ctx->get_reg(args[i]));
+				emit_ctx->append_insn(MIR_MOV, {
+					MIRMemOp(
+						MIR_T_P, temp_reg,
+						i * sizeof(PyObject*)
+					),
+					emit_ctx->get_reg(args[i])
+				});
+			}
+			break;
+		}
+	}
 
 	void ConstantIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);
