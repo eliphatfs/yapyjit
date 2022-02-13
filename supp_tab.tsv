@@ -21,6 +21,6 @@ Break 	1		Attribute
 Continue	1		Subscript	
 			Starred	
 			Name	P
-			List	
+			List	P
 			Tuple	P
-			Slice	P
+			Slice	
