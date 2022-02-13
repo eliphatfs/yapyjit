@@ -150,6 +150,21 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	// This is a 'large' instruction that I am not quite in favor of.
+	class IterNextIns : public Instruction {
+	public:
+		LabelIns* iterFailTo;
+		int dst;
+		int iter;
+		IterNextIns(LabelIns* iterFailTo_, int dst_local_id, int iter_local_id)
+			: iterFailTo(iterFailTo_), dst(dst_local_id), iter(iter_local_id) {}
+		virtual std::string pretty_print() {
+			return "fornx " + iterFailTo->pretty_print() + ", $" + std::to_string(dst)
+				   + " <- $" + std::to_string(iter);
+		}
+		virtual void emit(Function* func);
+	};
+
 	class ConstantIns : public Instruction {
 	public:
 		int dst;

@@ -32,6 +32,7 @@ namespace yapyjit {
 		CONST,
 		RETURN,
 		ASSIGN,
+		FOR,
 		WHILE,
 		IF,
 		BREAK,
@@ -296,6 +297,58 @@ namespace yapyjit {
 	public:
 		Pass() {}
 		virtual int emit_ir(Function& appender) {
+			return -1;
+		}
+	};
+
+	class For : public ASTWithTag<ASTTag::FOR> {
+	public:
+		std::unique_ptr<AST> target, iter;
+		std::vector<std::unique_ptr<AST>> body;
+		std::vector<std::unique_ptr<AST>> orelse;
+		For(std::unique_ptr<AST>& target_, std::unique_ptr<AST> iter_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
+			: target(std::move(target_)), iter(std::move(iter_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
+
+		virtual int emit_ir(Function& appender) {
+			auto saved_ctx = appender.ctx;
+			auto label_st = std::make_unique<LabelIns>();
+			auto label_body = std::make_unique<LabelIns>();
+			auto label_orelse = std::make_unique<LabelIns>();
+			auto label_ed = std::make_unique<LabelIns>();
+
+			appender.ctx.cont_pt = label_st.get();
+			appender.ctx.break_pt = label_ed.get();
+
+			// for target in iter body orelse end
+			// get_iter; start; fornx orelse; body; j start; orelse; end;
+			auto blt = PyEval_GetBuiltins();
+			if (!blt) throw std::logic_error(__FUNCTION__" cannot get builtins.");
+			if (!PyDict_CheckExact(blt)) throw std::logic_error(__FUNCTION__" builtins is not a dict.");
+			auto iterfn = PyDict_GetItemString(blt, "iter");
+			if (!iterfn) throw std::logic_error(__FUNCTION__" cannot get builtins.iter.");
+
+			auto iterconst = new_temp_var(appender);
+			appender.new_insn(new ConstantIns(iterconst, ManagedPyo(iterfn, true)));
+			auto iterobj = new_temp_var(appender);
+			auto call_ins = new CallIns(
+				iterobj, iterconst
+			);
+			call_ins->args.push_back(iter->emit_ir(appender));
+			appender.new_insn(call_ins);
+
+			auto target_tmp = new_temp_var(appender);
+			appender.add_insn(std::move(label_st));
+			appender.new_insn(new IterNextIns(label_orelse.get(), target_tmp, iterobj));
+			assn_ir(appender, target.get(), target_tmp);
+
+			appender.add_insn(std::move(label_body));
+			for (auto& stmt : body) stmt->emit_ir(appender);
+			appender.new_insn(new JumpIns(appender.ctx.cont_pt));
+			appender.add_insn(std::move(label_orelse));
+			for (auto& stmt : orelse) stmt->emit_ir(appender);
+			appender.add_insn(std::move(label_ed));
+
+			appender.ctx = saved_ctx;
 			return -1;
 		}
 	};

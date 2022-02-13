@@ -116,6 +116,21 @@ namespace yapyjit {
 				body, orelse
 			);
 		}
+		TARGET(For) {
+			std::vector<std::unique_ptr<AST>> body{};
+			for (auto stmt : ast_man.attr("body")) {
+				body.push_back(ast_py2native(stmt));
+			}
+			std::vector<std::unique_ptr<AST>> orelse{};
+			for (auto stmt : ast_man.attr("orelse")) {
+				orelse.push_back(ast_py2native(stmt));
+			}
+			return std::make_unique<For>(
+				ast_py2native(ast_man.attr("target")),
+				ast_py2native(ast_man.attr("iter")),
+				body, orelse
+			);
+		}
 		TARGET(While) {
 			std::vector<std::unique_ptr<AST>> body{};
 			for (auto stmt : ast_man.attr("body")) {

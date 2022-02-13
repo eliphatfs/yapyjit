@@ -154,6 +154,17 @@ namespace yapyjit {
 		func->emit_ctx->append_insn(MIR_BT, { ensure_label(func, target), ret });
 	}
 
+	void IterNextIns::emit(Function* func) {
+		auto target = func->emit_ctx->get_reg(dst);
+		emit_disown(func->emit_ctx.get(), target);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P }),
+			(int64_t)PyIter_Next, target, func->emit_ctx->get_reg(iter)
+		});
+		func->emit_ctx->append_insn(MIR_BF, { ensure_label(func, iterFailTo), target });
+	}
+
+
 	void ConstantIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);
 		func->emit_ctx->append_insn(MIR_MOV, {

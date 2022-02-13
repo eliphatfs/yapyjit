@@ -40,6 +40,13 @@ def sum1n(n):
     return s
 
 
+def sum1n_for(n):
+    s = 0
+    for i in range(1, n):
+        s += i
+    return s
+
+
 def seq(a, seq):
     if a is seq:
         return 100
@@ -63,7 +70,7 @@ def attributed():
 
 
 input("Press Enter to start...")
-for func in [trivial, add, multi, relu, relu2, sum1n, fib]:
+for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib]:
     print(func.__name__)
     print("-" * 40)
     print(yapyjit.get_ir(func), end='')
@@ -82,6 +89,8 @@ assert relu(2.4) == relu2(2.4) == yapyjit.jit(relu)(2.4) == yapyjit.jit(relu2)(2
 print("relu(2.4) == relu2(2.4) == yapyjit.jit(relu)(2.4) == yapyjit.jit(relu2)(2.4)")
 assert sum1n(10) == yapyjit.jit(sum1n)(10)
 print("sum1n(10) == yapyjit.jit(sum1n)(10)")
+assert sum1n_for(10) == yapyjit.jit(sum1n_for)(10)
+print("sum1n_for(10) == yapyjit.jit(sum1n_for)(10)")
 assert call() == yapyjit.jit(call)()
 print("call() == yapyjit.jit(call)()")
 assert seq(100, [100]) == yapyjit.jit(seq)(100, [100])
@@ -104,6 +113,12 @@ print("original sum:", timeit.timeit("sum1n(100000)", globals=globals(), number=
 sum1n = yapyjit.jit(sum1n)
 print("jitted sum:", timeit.timeit(
     "sum1n(100000)",
+    globals=globals(), number=100
+))
+print("original sum [for]:", timeit.timeit("sum1n_for(100000)", globals=globals(), number=100))
+sum1n_for = yapyjit.jit(sum1n_for)
+print("jitted sum [for]:", timeit.timeit(
+    "sum1n_for(100000)",
     globals=globals(), number=100
 ))
 print("fast sum:", timeit.timeit("sum(range(100000))", globals=globals(), number=100))
