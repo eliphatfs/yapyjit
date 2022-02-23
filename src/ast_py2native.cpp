@@ -2,14 +2,14 @@
 #include <yapyjit.h>
 #include <mpyo.h>
 
-constexpr inline int simple_hash(const char* s) {
-	int h = 0;
+constexpr inline long long simple_hash(const char* s) {
+	long long h = 0;
 	while (*s) {
-		h *= 31;
-		h += *s;
+		h *= 17;
+		h += *s - 'A';
 		s++;
 	}
-	return h % INT_MAX;
+	return h;
 }
 
 #define TARGET(cls) case simple_hash(#cls):
