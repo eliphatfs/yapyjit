@@ -181,6 +181,27 @@ namespace yapyjit {
 		});
 	}
 
+	void LoadItemIns::emit(Function* func) {
+		auto source = func->emit_ctx->get_reg(src);
+		auto target = func->emit_ctx->get_reg(dst);
+		auto sub = func->emit_ctx->get_reg(subscr);
+		emit_disown(func->emit_ctx.get(), target);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_GetItem, target, source, sub
+		});
+	}
+
+	void StoreItemIns::emit(Function* func) {
+		auto source = func->emit_ctx->get_reg(src);
+		auto target = func->emit_ctx->get_reg(dst);
+		auto sub = func->emit_ctx->get_reg(subscr);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_SetItem, target, sub, source
+		});
+	}
+
 	void IterNextIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);
 		emit_disown(func->emit_ctx.get(), target);

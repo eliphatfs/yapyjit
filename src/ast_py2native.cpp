@@ -15,6 +15,9 @@ constexpr inline long long simple_hash(const char* s) {
 #define TARGET(cls) case simple_hash(#cls):
 
 namespace yapyjit {
+	inline std::unique_ptr<AST> _helper_slice_cvt(const ManagedPyo& pyo) {
+		return pyo == Py_None ? std::make_unique<Constant>(ManagedPyo(Py_None, true)) : ast_py2native(pyo);
+	}
 	std::unique_ptr<AST> ast_py2native(ManagedPyo ast_man) {
 		// auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
 		switch (simple_hash(ast_man.type().attr("__name__").to_cstr())) {
@@ -116,6 +119,12 @@ namespace yapyjit {
 				return std::make_unique<Attribute>(
 					ast_py2native(ast_man.attr("value")),
 					ast_man.attr("attr").to_cstr()
+				);
+			}
+			TARGET(Subscript) {
+				return std::make_unique<Subscript>(
+					ast_py2native(ast_man.attr("value")),
+					ast_py2native(ast_man.attr("slice"))
 				);
 			}
 			TARGET(Name) {
@@ -238,6 +247,28 @@ namespace yapyjit {
 			}
 			TARGET(Assert) {
 				return std::make_unique<Pass>();
+			}
+			TARGET(Slice) {
+				auto lower = ast_man.attr("lower");
+				auto upper = ast_man.attr("upper");
+				auto step = ast_man.attr("step");
+				std::vector<std::unique_ptr<AST>> args {};
+				args.push_back(_helper_slice_cvt(lower));
+				args.push_back(_helper_slice_cvt(upper));
+				args.push_back(_helper_slice_cvt(step));
+				return std::make_unique<Call>(
+					std::unique_ptr<AST>(new Constant(ManagedPyo((PyObject*)&PySlice_Type, true))),
+					args
+				);
+			}
+			TARGET(ExtSlice) {
+				std::vector<std::unique_ptr<AST>> elts{};
+				for (auto val : ast_man.attr("dims"))
+					elts.push_back(ast_py2native(val));
+				return std::make_unique<Tuple>(elts);
+			}
+			TARGET(Index) {
+				return ast_py2native(ast_man.attr("value"));
 			}
 			TARGET(FunctionDef) {
 				auto result = std::make_unique<FuncDef>();

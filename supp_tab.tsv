@@ -18,9 +18,9 @@ Nonlocal			FormattedValue
 Expr	1		JoinedStr	
 Pass 	1		Constant	1
 Break 	1		Attribute	1
-Continue	1		Subscript	
+Continue	1		Subscript	1
 			Starred	
 			Name	1
 			List	P
 			Tuple	P
-			Slice	
+			Slice	1

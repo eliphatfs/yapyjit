@@ -24,6 +24,7 @@ namespace yapyjit {
 		ASTTag, int,
 		NAME = 1,
 		ATTR,
+		SUBSCR,
 		LIST, TUPLE,
 		BOOLOP,
 		BINOP,
@@ -327,6 +328,23 @@ namespace yapyjit {
 		}
 	};
 
+	class Subscript : public ASTWithTag<ASTTag::SUBSCR> {
+	public:
+		std::unique_ptr<AST> expr;
+		std::unique_ptr<AST> slice;
+
+		Subscript(std::unique_ptr<AST>& expr_, std::unique_ptr<AST>& slice_)
+			: expr(std::move(expr_)), slice(std::move(slice_)) {}
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			auto src_tv = expr->emit_ir(appender);
+			appender.new_insn(new LoadItemIns(
+				slice->emit_ir(appender), result, src_tv
+			));
+			return result;
+		}
+	};
+
 	class Constant : public ASTWithTag<ASTTag::CONST> {
 	public:
 		ManagedPyo value;
@@ -573,6 +591,15 @@ namespace yapyjit {
 			));
 		}
 		    break;
+		case ASTTag::SUBSCR: {
+			const Subscript* dst_attr = (Subscript*)dst;
+			auto dst_tv = dst_attr->expr->emit_ir(appender);
+			appender.new_insn(new StoreItemIns(
+				dst_attr->slice->emit_ir(appender), dst_tv,
+				src
+			));
+		}
+			break;
 		default:
 			throw std::invalid_argument(
 				std::string(__FUNCTION__" got unsupported target with kind ")

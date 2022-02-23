@@ -1,6 +1,7 @@
 import yapyjit
 import timeit
 import random
+import numpy
 
 
 def trivial():
@@ -91,8 +92,16 @@ def visit_class(a):
         return a.x
 
 
+def simple_ndarray():
+    a = numpy.arange(9).reshape(3, 3)
+    a[0, 2] = 100
+    return numpy.concatenate(
+        [a[1][::-1], a[0: 2, 1: 3].reshape(-1), a[0, 2:]]
+    )
+
+
 input("Press Enter to start...")
-for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib]:
+for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib, simple_ndarray]:
     print(func.__name__)
     print("-" * 40)
     print(yapyjit.get_ir(func), end='')
@@ -128,6 +137,10 @@ assert visit_object()() == yapyjit.jit(visit_object)()() == 2
 print("visit_object() equiv. yapyjit.jit(visit_object)()")
 assert visit_class(A()) == yapyjit.jit(visit_class)(A())
 print("visit_class() == yapyjit.jit(visit_class)()")
+print(simple_ndarray())
+print(yapyjit.jit(simple_ndarray)())
+assert numpy.allclose(simple_ndarray(), yapyjit.jit(simple_ndarray)())
+print("simple_ndarray() == yapyjit.jit(simple_ndarray)()")
 # yapyjit.jit(fib).mir("fib.mir")
 print("compilation time of fib:", timeit.timeit("yapyjit.jit(fib)", globals=globals(), number=100) / 100)
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))

@@ -178,6 +178,34 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class LoadItemIns : public Instruction {
+	public:
+		int subscr;
+		int dst;
+		int src;
+		LoadItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
+			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id) {}
+		virtual std::string pretty_print() {
+			return "ldi $" + std::to_string(dst)
+				+ " <- $" + std::to_string(src) + "[$" + std::to_string(subscr) + "]";
+		}
+		virtual void emit(Function* func);
+	};
+
+	class StoreItemIns : public Instruction {
+	public:
+		int subscr;
+		int dst;
+		int src;
+		StoreItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
+			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id) {}
+		virtual std::string pretty_print() {
+			return "sti $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]"
+				+ " <- $" + std::to_string(src);
+		}
+		virtual void emit(Function* func);
+	};
+
 	// This is a 'large' instruction that I am not quite in favor of.
 	class IterNextIns : public Instruction {
 	public:
@@ -208,7 +236,7 @@ namespace yapyjit {
 			: dst(dst_local_id), mode(mode_) {
 		}
 		virtual std::string pretty_print() {
-			std::string res = "build $" + std::to_string(dst) + " <-" + mode._to_string()  + "(";
+			std::string res = "build $" + std::to_string(dst) + " <- " + mode._to_string()  + "(";
 			for (size_t i = 0; i < args.size(); i++) {
 				if (i != 0) res += ", ";
 				res += "$" + std::to_string(args[i]);
