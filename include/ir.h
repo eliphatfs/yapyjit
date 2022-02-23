@@ -150,6 +150,34 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class LoadAttrIns : public Instruction {
+	public:
+		std::string name;
+		int dst;
+		int src;
+		LoadAttrIns(const std::string& attrname_, int dst_local_id, int src_local_id)
+			: name(attrname_), dst(dst_local_id), src(src_local_id) {}
+		virtual std::string pretty_print() {
+			return "lda $" + std::to_string(dst) + " <- $" +
+				std::to_string(src) + "." + name;
+		}
+		virtual void emit(Function* func);
+	};
+
+	class StoreAttrIns : public Instruction {
+	public:
+		std::string name;
+		int dst;
+		int src;
+		StoreAttrIns(const std::string& attrname_, int dst_local_id, int src_local_id)
+			: name(attrname_), dst(dst_local_id), src(src_local_id) {}
+		virtual std::string pretty_print() {
+			return "sta $" + std::to_string(dst) + "." + name
+				+ " <- $" + std::to_string(src);
+		}
+		virtual void emit(Function* func);
+	};
+
 	// This is a 'large' instruction that I am not quite in favor of.
 	class IterNextIns : public Instruction {
 	public:

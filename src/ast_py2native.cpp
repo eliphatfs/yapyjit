@@ -98,6 +98,12 @@ namespace yapyjit {
 				ast_py2native(ast_man.attr("func")), args
 			);
 		}
+		TARGET(Attribute) {
+			return std::make_unique<Attribute>(
+				ast_py2native(ast_man.attr("value")),
+				ast_man.attr("attr").to_cstr()
+			);
+		}
 		TARGET(Name) {
 			return std::make_unique<Name>(
 				ast_man.attr("id").to_cstr()

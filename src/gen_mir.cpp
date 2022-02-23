@@ -154,6 +154,33 @@ namespace yapyjit {
 		func->emit_ctx->append_insn(MIR_BT, { ensure_label(func, target), ret });
 	}
 
+	void StoreAttrIns::emit(Function* func) {
+		auto source = func->emit_ctx->get_reg(src);
+		auto obj = func->emit_ctx->get_reg(dst);
+		auto attr_obj = ManagedPyo(
+			PyUnicode_FromString(name.c_str())
+		);
+		func->emit_keeprefs.push_back(attr_obj);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_SetAttr, obj, (int64_t)attr_obj.borrow(), source
+		});
+	}
+
+	void LoadAttrIns::emit(Function* func) {
+		auto target = func->emit_ctx->get_reg(dst);
+		emit_disown(func->emit_ctx.get(), target);
+		auto obj = func->emit_ctx->get_reg(src);
+		auto attr_obj = ManagedPyo(
+			PyUnicode_FromString(name.c_str())
+		);
+		func->emit_keeprefs.push_back(attr_obj);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_GetAttr, target, obj, (int64_t)attr_obj.borrow()
+		});
+	}
+
 	void IterNextIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);
 		emit_disown(func->emit_ctx.get(), target);

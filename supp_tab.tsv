@@ -17,10 +17,10 @@ Global			Call	P
 Nonlocal			FormattedValue	
 Expr	1		JoinedStr	
 Pass 	1		Constant	1
-Break 	1		Attribute	
+Break 	1		Attribute	1
 Continue	1		Subscript	
 			Starred	
-			Name	P
+			Name	1
 			List	P
 			Tuple	P
 			Slice	

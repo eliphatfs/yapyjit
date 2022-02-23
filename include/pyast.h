@@ -23,6 +23,7 @@ namespace yapyjit {
 	BETTER_ENUM(
 		ASTTag, int,
 		NAME = 1,
+		ATTR,
 		LIST, TUPLE,
 		BOOLOP,
 		BINOP,
@@ -310,6 +311,22 @@ namespace yapyjit {
 		}
 	};
 
+	class Attribute : public ASTWithTag<ASTTag::ATTR> {
+	public:
+		std::unique_ptr<AST> expr;
+		std::string attr;
+
+		Attribute(std::unique_ptr<AST>& expr_, const std::string& attr_)
+			: expr(std::move(expr_)), attr(attr_) {}
+		virtual int emit_ir(Function& appender) {
+			int result = new_temp_var(appender);
+			appender.new_insn(new LoadAttrIns(
+				attr, result, expr->emit_ir(appender)
+			));
+			return result;
+		}
+	};
+
 	class Constant : public ASTWithTag<ASTTag::CONST> {
 	public:
 		ManagedPyo value;
@@ -530,23 +547,37 @@ namespace yapyjit {
 
 	inline void assn_ir(Function& appender, AST* dst, int src) {
 		// TODO: setitem, setattr, starred, destruct, non-local
-		if (dst->tag() != +ASTTag::NAME)
+		switch (dst->tag())
+		{
+		case ASTTag::NAME: {
+			const auto& id = ((Name*)dst)->identifier;
+			if (appender.globals.count(id)) {
+				throw std::invalid_argument(
+					std::string(
+						__FUNCTION__
+						" trying to assign to global variable (or possibly unbound local) `"
+					) + id + "`"
+				);
+			}
+			const auto vid = appender.locals.insert(
+				{ id, (int)appender.locals.size() + 1 }
+			).first;  // second is success
+			appender.new_insn(new MoveIns(vid->second, src));
+		}
+			break;
+		case ASTTag::ATTR: {
+			const Attribute* dst_attr = (Attribute*)dst;
+			appender.new_insn(new StoreAttrIns(
+				dst_attr->attr, dst_attr->expr->emit_ir(appender),
+				src
+			));
+		}
+		    break;
+		default:
 			throw std::invalid_argument(
 				std::string(__FUNCTION__" got unsupported target with kind ")
 				+ dst->tag()._to_string()
 			);
-		const auto& id = ((Name*)dst)->identifier;
-		if (appender.globals.count(id)) {
-			throw std::invalid_argument(
-				std::string(
-					__FUNCTION__
-					" trying to assign to global variable (or possibly unbound local) `"
-				) + id + "`"
-			);
 		}
-		const auto vid = appender.locals.insert(
-			{ id, (int)appender.locals.size() + 1 }
-		).first;  // second is success
-		appender.new_insn(new MoveIns(vid->second, src));
 	}
 };

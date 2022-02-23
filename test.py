@@ -1,5 +1,6 @@
 import yapyjit
 import timeit
+import random
 
 
 def trivial():
@@ -73,6 +74,23 @@ def container_build():
     return [1, 2], 3, 4, {5, 6}, {7: 8}
 
 
+def visit_object():
+    return yapyjit.jit(attributed)
+
+
+class A:
+    def __init__(self) -> None:
+        self.x = 1
+
+
+def visit_class(a):
+    if a.x != 3:
+        a.x = 3 + random.randint(-1, 1)
+        return visit_class(a)
+    else:
+        return a.x
+
+
 input("Press Enter to start...")
 for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib]:
     print(func.__name__)
@@ -106,6 +124,10 @@ assert seq(None, []) == yapyjit.jit(seq)(None, [])
 print("is, is not, in, not in all passed")
 assert container_build() == yapyjit.jit(container_build)()
 print("container_build() == yapyjit.jit(container_build)()")
+assert visit_object()() == yapyjit.jit(visit_object)()() == 2
+print("visit_object() equiv. yapyjit.jit(visit_object)()")
+assert visit_class(A()) == yapyjit.jit(visit_class)(A())
+print("visit_class() == yapyjit.jit(visit_class)()")
 # yapyjit.jit(fib).mir("fib.mir")
 print("compilation time of fib:", timeit.timeit("yapyjit.jit(fib)", globals=globals(), number=100) / 100)
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
