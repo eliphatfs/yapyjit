@@ -100,6 +100,13 @@ def simple_ndarray():
     )
 
 
+def fstring():
+    world = 'world'
+    a = 123
+    b = 456.7
+    return f'hello {world!r} {a:04d} {b:.2f}'
+
+
 input("Press Enter to start...")
 for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib, simple_ndarray]:
     print(func.__name__)
@@ -141,6 +148,8 @@ print(simple_ndarray())
 print(yapyjit.jit(simple_ndarray)())
 assert numpy.allclose(simple_ndarray(), yapyjit.jit(simple_ndarray)())
 print("simple_ndarray() == yapyjit.jit(simple_ndarray)()")
+assert fstring() == yapyjit.jit(fstring)()
+print("fstring() == yapyjit.jit(fstring)()")
 # yapyjit.jit(fib).mir("fib.mir")
 print("compilation time of fib:", timeit.timeit("yapyjit.jit(fib)", globals=globals(), number=100) / 100)
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))

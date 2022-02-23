@@ -18,6 +18,14 @@ namespace yapyjit {
 	inline std::unique_ptr<AST> _helper_slice_cvt(const ManagedPyo& pyo) {
 		return pyo == Py_None ? std::make_unique<Constant>(ManagedPyo(Py_None, true)) : ast_py2native(pyo);
 	}
+	inline std::unique_ptr<AST> _helper_get_builtin_as_ast_constant(const std::string& name) {
+		auto blt = PyEval_GetBuiltins();
+		if (!blt) throw std::logic_error(__FUNCTION__" cannot get builtins.");
+		if (!PyDict_CheckExact(blt)) throw std::logic_error(__FUNCTION__" builtins is not a dict.");
+		auto obj = PyDict_GetItemString(blt, name.c_str());
+		if (!obj) throw std::logic_error(__FUNCTION__" cannot get builtins." + name + ".");
+		return std::make_unique<Constant>(ManagedPyo(obj, true));
+	}
 	std::unique_ptr<AST> ast_py2native(ManagedPyo ast_man) {
 		// auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
 		switch (simple_hash(ast_man.type().attr("__name__").to_cstr())) {
@@ -130,6 +138,49 @@ namespace yapyjit {
 			TARGET(Name) {
 				return std::make_unique<Name>(
 					ast_man.attr("id").to_cstr()
+				);
+			}
+			TARGET(FormattedValue) {
+				std::unique_ptr<AST> val = ast_py2native(ast_man.attr("value"));
+				std::unique_ptr<AST> cvt = nullptr;
+				auto spec = ast_man.attr("format_spec");
+				switch (ast_man.attr("conversion").to_cLL()) {
+				case 97:
+					cvt = _helper_get_builtin_as_ast_constant("ascii"); break;
+				case 114:
+					cvt = _helper_get_builtin_as_ast_constant("repr"); break;
+				case 115:
+					cvt = _helper_get_builtin_as_ast_constant("str"); break;
+				}
+				std::vector<std::unique_ptr<AST>> cvtargs {};
+				if (cvt) {
+					cvtargs.push_back(std::move(val));
+					val = std::make_unique<Call>(
+						cvt, cvtargs
+					);
+				}
+				std::vector<std::unique_ptr<AST>> fmtargs {};
+				fmtargs.push_back(std::move(val));
+				if (!(spec == Py_None))
+					fmtargs.push_back(ast_py2native(ast_man.attr("format_spec")));
+				return std::make_unique<Call>(
+					_helper_get_builtin_as_ast_constant("format"),
+					fmtargs
+				);
+			}
+			TARGET(JoinedStr) {
+				std::unique_ptr<AST> joiner = std::make_unique<Constant>(
+					ManagedPyo(PyUnicode_FromString("")).attr("join")
+				);
+				std::vector<std::unique_ptr<AST>> args {};
+				for (auto val : ast_man.attr("values")) {
+					args.push_back(ast_py2native(val));
+				}
+				std::unique_ptr<AST> argtuple = std::make_unique<Tuple>(args);
+				std::vector<std::unique_ptr<AST>> callargs {};
+				callargs.push_back(std::move(argtuple));
+				return std::make_unique<Call>(
+					joiner, callargs
 				);
 			}
 			TARGET(Constant) {
