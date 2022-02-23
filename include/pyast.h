@@ -36,6 +36,7 @@ namespace yapyjit {
 		CALL,
 		CONST,
 		RETURN,
+		DELETE,
 		ASSIGN,
 		FOR,
 		WHILE,
@@ -57,6 +58,7 @@ namespace yapyjit {
 	};
 
 	inline void assn_ir(Function& appender, AST* dst, int src);
+	inline void del_ir(Function& appender, AST* dst);
 
 	template<int T_tag>
 	class ASTWithTag: public AST {
@@ -401,6 +403,19 @@ namespace yapyjit {
 		}
 	};
 
+	class Delete : public ASTWithTag<ASTTag::DELETE> {
+	public:
+		std::vector<std::unique_ptr<AST>> targets;
+		Delete(std::vector<std::unique_ptr<AST>>& targets_)
+			: targets(std::move(targets_)) {}
+		virtual int emit_ir(Function& appender) {
+			for (auto& target : targets) {
+				del_ir(appender, target.get());
+			}
+			return -1;
+		}
+	};
+
 	class Pass : public ASTWithTag<ASTTag::PASS> {
 	public:
 		Pass() {}
@@ -539,46 +554,47 @@ namespace yapyjit {
 
 	class FuncDef : public ASTWithTag<ASTTag::FUNCDEF> {
 	public:
+		ManagedPyo global_ns;
 		std::string name;
 		std::vector<std::string> args;
 		std::vector<std::unique_ptr<AST>> body_stmts;
+		FuncDef(ManagedPyo global_ns_): global_ns(global_ns_) {}
 		virtual int emit_ir(Function& appender) {
+			throw std::logic_error("Nested functions are not supported yet");
+		}
+		std::unique_ptr<Function> emit_ir_f() {
+			auto appender = std::make_unique<Function>(global_ns, name, static_cast<int>(args.size()));
 			for (size_t i = 0; i < args.size(); i++) {
-				appender.locals[args[i]] = (int)i + 1;
+				appender->locals[args[i]] = (int)i + 1;
 			}
 			for (auto& stmt : body_stmts) {
-				stmt->emit_ir(appender);
+				stmt->emit_ir(*appender);
 			}
 
 			// Return none if not yet.
 			Return ret_none_default = Return(
 				std::unique_ptr<AST>(new Constant(ManagedPyo(Py_None, true)))
 			);
-			ret_none_default.emit_ir(appender);
+			ret_none_default.emit_ir(*appender);
 
-			Function prelude = Function(name, 0);
-			for (const auto& glob : appender.globals) {
+			Function prelude = Function(global_ns, name, 0);
+			for (const auto& glob : appender->globals) {
 				prelude.new_insn(new LoadGlobalIns(
-					appender.locals[glob], glob
+					appender->locals[glob], glob
 				));
 			}
-			appender.instructions.insert(
-				appender.instructions.begin(),
+			appender->instructions.insert(
+				appender->instructions.begin(),
 				std::make_move_iterator(prelude.instructions.begin()),
 				std::make_move_iterator(prelude.instructions.end())
 			);
-			return -1;
-		}
-		std::unique_ptr<Function> emit_ir_f() {
-			auto result = std::make_unique<Function>(name, static_cast<int>(args.size()));
-			emit_ir(*result);
-			result->dce();
-			return std::move(result);
+			appender->dce();
+			return std::move(appender);
 		}
 	};
 
 	inline void assn_ir(Function& appender, AST* dst, int src) {
-		// TODO: setitem, setattr, starred, destruct, non-local
+		// TODO: starred, destruct, non-local
 		switch (dst->tag())
 		{
 		case ASTTag::NAME: {
@@ -611,6 +627,33 @@ namespace yapyjit {
 			appender.new_insn(new StoreItemIns(
 				dst_attr->slice->emit_ir(appender), dst_tv,
 				src
+			));
+		}
+			break;
+		default:
+			throw std::invalid_argument(
+				std::string(__FUNCTION__" got unsupported target with kind ")
+				+ dst->tag()._to_string()
+			);
+		}
+	}
+
+	inline void del_ir(Function& appender, AST* dst) {
+		switch (dst->tag())
+		{
+		case ASTTag::NAME: break;  // No-op for now
+		case ASTTag::ATTR: {
+			const Attribute* dst_attr = (Attribute*)dst;
+			appender.new_insn(new DelAttrIns(
+				dst_attr->attr, dst_attr->expr->emit_ir(appender)
+			));
+		}
+			break;
+		case ASTTag::SUBSCR: {
+			const Subscript* dst_attr = (Subscript*)dst;
+			auto dst_tv = dst_attr->expr->emit_ir(appender);
+			appender.new_insn(new DelItemIns(
+				dst_attr->slice->emit_ir(appender), dst_tv
 			));
 		}
 			break;

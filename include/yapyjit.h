@@ -8,6 +8,7 @@ static_assert(sizeof(Py_ssize_t) == 8, "Only 64 bit machines are supported");
 
 namespace yapyjit {
     extern MIRContext mir_ctx;
+    extern ManagedPyo global_ns_current;
 	extern std::unique_ptr<AST> ast_py2native(ManagedPyo ast);
 	extern MIR_item_t generate_mir(Function& func);
     extern int initialize_wf(PyObject* m);
@@ -15,6 +16,7 @@ namespace yapyjit {
 	inline ManagedPyo get_py_ast(PyObject* pyfunc) {
         auto locals = ManagedPyo(PyDict_New());
         PyDict_SetItemString(locals.borrow(), "a", pyfunc);
+        global_ns_current = ManagedPyo(pyfunc, true).attr("__globals__");
 
         auto pyast = PyRun_String(
             "__import__('ast').parse(__import__('textwrap').dedent(__import__('inspect').getsource(a))).body[0]",

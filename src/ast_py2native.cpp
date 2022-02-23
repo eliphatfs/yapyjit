@@ -15,6 +15,7 @@ constexpr inline long long simple_hash(const char* s) {
 #define TARGET(cls) case simple_hash(#cls):
 
 namespace yapyjit {
+	ManagedPyo global_ns_current = ManagedPyo(Py_None, true);
 	inline std::unique_ptr<AST> _helper_slice_cvt(const ManagedPyo& pyo) {
 		return pyo == Py_None ? std::make_unique<Constant>(ManagedPyo(Py_None, true)) : ast_py2native(pyo);
 	}
@@ -215,6 +216,15 @@ namespace yapyjit {
 					targets
 				);
 			}
+			TARGET(Delete) {
+				std::vector<std::unique_ptr<AST>> targets{};
+				for (auto target : ast_man.attr("targets")) {
+					targets.push_back(ast_py2native(target));
+				}
+				return std::make_unique<Delete>(
+					targets
+				);
+			}
 			TARGET(If) {
 				std::vector<std::unique_ptr<AST>> body{};
 				for (auto stmt : ast_man.attr("body")) {
@@ -328,7 +338,7 @@ namespace yapyjit {
 				return ast_py2native(ast_man.attr("value"));
 			}
 			TARGET(FunctionDef) {
-				auto result = std::make_unique<FuncDef>();
+				auto result = std::make_unique<FuncDef>(global_ns_current);
 
 				auto name = ast_man.attr("name");
 				result->name = name.to_cstr();

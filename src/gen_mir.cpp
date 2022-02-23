@@ -167,6 +167,18 @@ namespace yapyjit {
 		});
 	}
 
+	void DelAttrIns::emit(Function* func) {
+		auto obj = func->emit_ctx->get_reg(dst);
+		auto attr_obj = ManagedPyo(
+			PyUnicode_FromString(name.c_str())
+		);
+		func->emit_keeprefs.push_back(attr_obj);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_SetAttr, obj, (int64_t)attr_obj.borrow(), (intptr_t)nullptr
+		});
+	}
+
 	void LoadAttrIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);
 		emit_disown(func->emit_ctx.get(), target);
@@ -199,6 +211,15 @@ namespace yapyjit {
 		func->emit_ctx->append_insn(MIR_CALL, {
 			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_SetItem, target, sub, source
+		});
+	}
+
+	void DelItemIns::emit(Function* func) {
+		auto target = func->emit_ctx->get_reg(dst);
+		auto sub = func->emit_ctx->get_reg(subscr);
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
+			(int64_t)PyObject_DelItem, target, sub
 		});
 	}
 
@@ -307,7 +328,7 @@ namespace yapyjit {
 		auto target = func->emit_ctx->get_reg(dst);
 		// Assume the namespace refer to the same object when compiling and execution.
 		// So the environ will keep a reference to globals.
-		auto glob = PyEval_GetGlobals();
+		auto glob = func->globals_ns.borrow();  // PyEval_GetGlobals();
 		auto blt = PyEval_GetBuiltins();
 		if (!glob) throw std::logic_error(__FUNCTION__" cannot get globals.");
 		if (!PyDict_CheckExact(glob)) throw std::logic_error(__FUNCTION__" globals() is not a dict.");

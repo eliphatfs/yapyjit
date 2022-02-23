@@ -178,6 +178,18 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class DelAttrIns : public Instruction {
+	public:
+		std::string name;
+		int dst;
+		DelAttrIns(const std::string& attrname_, int dst_local_id)
+			: name(attrname_), dst(dst_local_id) {}
+		virtual std::string pretty_print() {
+			return "dela $" + std::to_string(dst) + "." + name;
+		}
+		virtual void emit(Function* func);
+	};
+
 	class LoadItemIns : public Instruction {
 	public:
 		int subscr;
@@ -202,6 +214,18 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "sti $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]"
 				+ " <- $" + std::to_string(src);
+		}
+		virtual void emit(Function* func);
+	};
+
+	class DelItemIns : public Instruction {
+	public:
+		int subscr;
+		int dst;
+		DelItemIns(int subscr_local_id, int dst_local_id)
+			: subscr(subscr_local_id), dst(dst_local_id) {}
+		virtual std::string pretty_print() {
+			return "deli $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]";
 		}
 		virtual void emit(Function* func);
 	};
@@ -292,6 +316,7 @@ namespace yapyjit {
 
 	class Function {
 	public:
+		ManagedPyo globals_ns;
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
 		std::map<std::string, int> locals;
@@ -305,7 +330,7 @@ namespace yapyjit {
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
-		Function(std::string _name, int nargs_) : name(_name), ctx(), nargs(nargs_) {}
+		Function(ManagedPyo globals_ns_, std::string name_, int nargs_) : globals_ns(globals_ns_), name(name_), ctx(), nargs(nargs_) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.
 		void new_insn(Instruction * insn) {

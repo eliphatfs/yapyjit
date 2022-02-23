@@ -112,6 +112,17 @@ def named_expr():
     return a + b + c
 
 
+def del_sub():
+    a = [1, 2, 3, 4, 5]
+    b = {4: 5, 6: 7}
+    c = A()
+    del a[1]
+    del a[0], b[4]
+    del c.x
+    assert len(A().__dict__) != len(c.__dict__)
+    return len(a), len(b), len(c.__dict__), len(A().__dict__)
+
+
 input("Press Enter to start...")
 for func in [trivial, add, multi, relu, relu2, sum1n, sum1n_for, fib, simple_ndarray]:
     print(func.__name__)
@@ -157,6 +168,8 @@ assert fstring() == yapyjit.jit(fstring)()
 print("fstring() == yapyjit.jit(fstring)()")
 assert named_expr() == yapyjit.jit(named_expr)()
 print("named_expr() == yapyjit.jit(named_expr)()")
+assert del_sub() == yapyjit.jit(del_sub)()
+print("del_sub() == yapyjit.jit(del_sub)()")
 # yapyjit.jit(fib).mir("fib.mir")
 print("compilation time of fib:", timeit.timeit("yapyjit.jit(fib)", globals=globals(), number=100) / 100)
 print("original fib:", timeit.timeit("fib(18)", globals=globals(), number=100))
