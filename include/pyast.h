@@ -27,6 +27,7 @@ namespace yapyjit {
 		SUBSCR,
 		LIST, TUPLE,
 		BOOLOP,
+		NAMEDEXPR,
 		BINOP,
 		UNARYOP,
 		IFEXP,
@@ -369,6 +370,19 @@ namespace yapyjit {
 			int ret = expr->emit_ir(appender);
 			appender.new_insn(new ReturnIns(ret));
 			return -1;
+		}
+	};
+
+	class NamedExpr : public ASTWithTag<ASTTag::NAMEDEXPR> {
+	public:
+		std::unique_ptr<AST> expr;
+		std::unique_ptr<AST> target;
+		NamedExpr(std::unique_ptr<AST>& expr_, std::unique_ptr<AST>& target_)
+			: expr(std::move(expr_)), target(std::move(target_)) {}
+		virtual int emit_ir(Function& appender) {
+			int src = expr->emit_ir(appender);
+			assn_ir(appender, target.get(), src);
+			return src;
 		}
 	};
 

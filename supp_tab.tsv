@@ -1,6 +1,6 @@
 Statements			Expressions	
 Return	1		BoolOp	1
-Delete			NamedExpr	
+Delete			NamedExpr	1
 Assign	1		BinOp	1
 AugAssign	P		UnaryOp	1
 AnnAssign	1		Lambda	

@@ -49,6 +49,12 @@ namespace yapyjit {
 				}
 				return ret;
 			}
+			TARGET(NamedExpr) {
+				return std::make_unique<NamedExpr>(
+					ast_py2native(ast_man.attr("value")),
+					ast_py2native(ast_man.attr("target"))
+				);
+			}
 			TARGET(BinOp) {
 				Op2ary op = Op2ary::_from_string(
 					ast_man.attr("op").type().attr("__name__").to_cstr()
