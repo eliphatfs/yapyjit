@@ -13,7 +13,7 @@ if platform.system() == 'Windows':
     cc_args += ['/DEBUG', '/Z7']
     cl_args += ['/DEBUG']
 else:
-    cc_args += ['-D__FUNCTION__=""']
+    cc_args += ['-D__FUNCTION__=""', '-fpermissive']
     # TODO: change all occurrences
 
 
