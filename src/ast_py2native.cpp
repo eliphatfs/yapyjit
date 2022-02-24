@@ -195,6 +195,21 @@ namespace yapyjit {
 					ast_man.attr("value")
 				);
 			}
+			TARGET(Num) {
+				return std::make_unique<Constant>(ast_man.attr("n"));
+			}
+			TARGET(Str) {
+				return std::make_unique<Constant>(ast_man.attr("s"));
+			}
+			TARGET(Bytes) {
+				return std::make_unique<Constant>(ast_man.attr("s"));
+			}
+			TARGET(Ellipsis) {
+				return std::make_unique<Constant>(ManagedPyo(Py_Ellipsis, true));
+			}
+			TARGET(NameConstant) {
+				return std::make_unique<Constant>(ast_man.attr("value"));
+			}
 			TARGET(Return) {
 				auto val = ast_man.attr("value");
 				if (val == Py_None) {

@@ -134,6 +134,10 @@ def named_expr():
     return a + b + c
 
 
+def constants():
+    return 1, '2', b'3', r'4\5', True, False, None, ...
+
+
 def del_sub():
     a = [1, 2, 3, 4, 5]
     b = {4: 5, 6: 7}
