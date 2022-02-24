@@ -74,7 +74,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> a, b;
 		OpBool op;
 
-		BoolOp(std::unique_ptr<AST>& left_, std::unique_ptr<AST>& right_, OpBool op_)
+		BoolOp(std::unique_ptr<AST>&& left_, std::unique_ptr<AST>&& right_, OpBool op_)
 			: a(std::move(left_)), b(std::move(right_)), op(op_) {}
 
 		virtual int emit_ir(Function& appender) {
@@ -121,7 +121,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> left, right;
 		Op2ary op;
 
-		BinOp(std::unique_ptr<AST>& left_, std::unique_ptr<AST>& right_, Op2ary op_)
+		BinOp(std::unique_ptr<AST>&& left_, std::unique_ptr<AST>&& right_, Op2ary op_)
 			: left(std::move(left_)), right(std::move(right_)), op(op_) {}
 
 		virtual int emit_ir(Function& appender) {
@@ -140,7 +140,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> operand;
 		Op1ary op;
 
-		UnaryOp(std::unique_ptr<AST>& operand_, Op1ary op_)
+		UnaryOp(std::unique_ptr<AST>&& operand_, Op1ary op_)
 			: operand(std::move(operand_)), op(op_) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
@@ -155,7 +155,7 @@ namespace yapyjit {
 	public:
 		std::unique_ptr<AST> test, body, orelse;
 
-		IfExp(std::unique_ptr<AST>& test_, std::unique_ptr<AST>& body_, std::unique_ptr<AST>& orelse_)
+		IfExp(std::unique_ptr<AST>&& test_, std::unique_ptr<AST>&& body_, std::unique_ptr<AST>&& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
@@ -281,7 +281,7 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> args;
 		// TODO: support kwargs
 
-		Call(std::unique_ptr<AST>& func_, std::vector<std::unique_ptr<AST>>& args_)
+		Call(std::unique_ptr<AST>&& func_, std::vector<std::unique_ptr<AST>>& args_)
 			: func(std::move(func_)), args(std::move(args_)) {
 		}
 
@@ -320,7 +320,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> expr;
 		std::string attr;
 
-		Attribute(std::unique_ptr<AST>& expr_, const std::string& attr_)
+		Attribute(std::unique_ptr<AST>&& expr_, const std::string& attr_)
 			: expr(std::move(expr_)), attr(attr_) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
@@ -336,7 +336,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> expr;
 		std::unique_ptr<AST> slice;
 
-		Subscript(std::unique_ptr<AST>& expr_, std::unique_ptr<AST>& slice_)
+		Subscript(std::unique_ptr<AST>&& expr_, std::unique_ptr<AST>&& slice_)
 			: expr(std::move(expr_)), slice(std::move(slice_)) {}
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
@@ -366,7 +366,7 @@ namespace yapyjit {
 	class Return : public ASTWithTag<ASTTag::RETURN> {
 	public:
 		std::unique_ptr<AST> expr;
-		Return(std::unique_ptr<AST>& expr_)
+		Return(std::unique_ptr<AST>&& expr_)
 			: expr(std::move(expr_)) {}
 		virtual int emit_ir(Function& appender) {
 			int ret = expr->emit_ir(appender);
@@ -379,7 +379,7 @@ namespace yapyjit {
 	public:
 		std::unique_ptr<AST> expr;
 		std::unique_ptr<AST> target;
-		NamedExpr(std::unique_ptr<AST>& expr_, std::unique_ptr<AST>& target_)
+		NamedExpr(std::unique_ptr<AST>&& expr_, std::unique_ptr<AST>&& target_)
 			: expr(std::move(expr_)), target(std::move(target_)) {}
 		virtual int emit_ir(Function& appender) {
 			int src = expr->emit_ir(appender);
@@ -392,7 +392,7 @@ namespace yapyjit {
 	public:
 		std::unique_ptr<AST> expr;
 		std::vector<std::unique_ptr<AST>> targets;
-		Assign(std::unique_ptr<AST>& expr_, std::vector<std::unique_ptr<AST>>& targets_)
+		Assign(std::unique_ptr<AST>&& expr_, std::vector<std::unique_ptr<AST>>& targets_)
 			: expr(std::move(expr_)), targets(std::move(targets_)) {}
 		virtual int emit_ir(Function& appender) {
 			int src = expr->emit_ir(appender);
@@ -429,7 +429,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> target, iter;
 		std::vector<std::unique_ptr<AST>> body;
 		std::vector<std::unique_ptr<AST>> orelse;
-		For(std::unique_ptr<AST>& target_, std::unique_ptr<AST> iter_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
+		For(std::unique_ptr<AST>&& target_, std::unique_ptr<AST> iter_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: target(std::move(target_)), iter(std::move(iter_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 
 		virtual int emit_ir(Function& appender) {
@@ -481,7 +481,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> test;
 		std::vector<std::unique_ptr<AST>> body;
 		std::vector<std::unique_ptr<AST>> orelse;
-		While(std::unique_ptr<AST>& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
+		While(std::unique_ptr<AST>&& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 		virtual int emit_ir(Function& appender) {
 			auto saved_ctx = appender.ctx;
@@ -530,7 +530,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> test;
 		std::vector<std::unique_ptr<AST>> body;
 		std::vector<std::unique_ptr<AST>> orelse;
-		If(std::unique_ptr<AST>& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
+		If(std::unique_ptr<AST>&& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 		virtual int emit_ir(Function& appender) {
 			int cond = test->emit_ir(appender);

@@ -163,7 +163,7 @@ namespace yapyjit {
 				if (cvt) {
 					cvtargs.push_back(std::move(val));
 					val = std::make_unique<Call>(
-						cvt, cvtargs
+						std::move(cvt), cvtargs
 					);
 				}
 				std::vector<std::unique_ptr<AST>> fmtargs {};
@@ -187,7 +187,7 @@ namespace yapyjit {
 				std::vector<std::unique_ptr<AST>> callargs {};
 				callargs.push_back(std::move(argtuple));
 				return std::make_unique<Call>(
-					joiner, callargs
+					std::move(joiner), callargs
 				);
 			}
 			TARGET(Constant) {
@@ -214,7 +214,7 @@ namespace yapyjit {
 				auto val = ast_man.attr("value");
 				if (val == Py_None) {
 					std::unique_ptr<AST> none_const = std::make_unique<Constant>(Py_None);
-					return std::make_unique<Return>(none_const);
+					return std::make_unique<Return>(std::move(none_const));
 				}
 				else
 					return std::make_unique<Return>(
@@ -290,9 +290,10 @@ namespace yapyjit {
 				return std::make_unique<Continue>();
 			}
 			TARGET(Expr) {
+				auto empty_assn_targets = std::vector<std::unique_ptr<AST>>{};
 				return std::make_unique<Assign>(
 					ast_py2native(ast_man.attr("value")),
-					std::vector<std::unique_ptr<AST>>{}
+					empty_assn_targets
 				);
 			}
 			TARGET(AugAssign) {
@@ -311,7 +312,7 @@ namespace yapyjit {
 				std::vector<std::unique_ptr<AST>> targets;
 				targets.push_back(ast_py2native(ast_man.attr("target")));
 				return std::make_unique<Assign>(
-					binop, targets
+					std::move(binop), targets
 				);
 			}
 			TARGET(AnnAssign) {

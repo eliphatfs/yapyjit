@@ -13,7 +13,8 @@ if platform.system() == 'Windows':
     cc_args += ['/DEBUG', '/Z7']
     cl_args += ['/DEBUG']
 else:
-    cc_args += ['-g']
+    cc_args += ['-D__FUNCTION__=""']
+    # TODO: change all occurrences
 
 
 setuptools.setup(
