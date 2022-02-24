@@ -11,7 +11,7 @@ namespace yapyjit {
 	auto guarded(PyObject * self, PyObject * args) {
 		try {
 			decltype(pycall(nullptr, nullptr)) (*fnp)(PyObject*, PyObject*);
-			fnp = (decltype(fnp))&pycall;
+			fnp = (decltype(fnp))pycall;
 			return fnp(self, args);
 		}
 		catch (registered_pyexc&) {
