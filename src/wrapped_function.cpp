@@ -93,7 +93,7 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_doc = "Jitted functions";
     wf_type.tp_basicsize = sizeof(WrappedFunctionObject);
     wf_type.tp_itemsize = 0;
-    wf_type.tp_flags = Py_TPFLAGS_DEFAULT;
+    wf_type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_METHOD_DESCRIPTOR;
 
     wf_type.tp_new = wf_new;
     wf_type.tp_init = (initproc)yapyjit::guarded<wf_init>();
