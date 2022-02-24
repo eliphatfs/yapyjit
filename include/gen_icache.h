@@ -15,8 +15,14 @@ namespace yapyjit {
     template<typename retT, typename ...argT>
     using FuncT = retT(*)(argT...);
 
+    // FIXME: workaround for gcc bug 104672
     template<typename retT, typename ...argT>
-    using ResolverT = retT(*)(argT..., FuncT<retT, argT...>*);
+    struct ResolverTHelper {
+        using T = retT(*)(argT..., FuncT<retT, argT...>*);
+    };
+
+    template<typename retT, typename ...argT>
+    using ResolverT = typename ResolverTHelper<retT, argT...>::T;
 
     inline PyObject* pyo_sequence_repeat_obj(PyObject* seq, PyObject* n) {
         Py_ssize_t count;
