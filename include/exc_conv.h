@@ -15,11 +15,11 @@ namespace yapyjit {
 			return fnp(self, args);
 		}
 		catch (registered_pyexc&) {
-			return (decltype(pycall(nullptr, nullptr)))nullptr;
+			return decltype(pycall(nullptr, nullptr))();
 		}
 		catch (std::exception& other) {
 			PyErr_SetString(PyExc_RuntimeError, other.what());
-			return (decltype(pycall(nullptr, nullptr)))nullptr;
+			return decltype(pycall(nullptr, nullptr))();
 		}
 	}
 }
