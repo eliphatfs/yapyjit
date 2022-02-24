@@ -32,7 +32,7 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
  * List of functions to add to yapyjit in exec_yapyjit().
  */
 static PyMethodDef yapyjit_functions[] = {
-    { "get_ir", (PyCFunction)yapyjit::guarded<&yapyjit_ir>, METH_VARARGS, yapyjit_get_ir_doc },
+    { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 
@@ -60,7 +60,7 @@ PyDoc_STRVAR(yapyjit_doc, "Yet another JIT for python.");
 
 
 static PyModuleDef_Slot yapyjit_slots[] = {
-    { Py_mod_exec, exec_yapyjit },
+    { Py_mod_exec, (void*)exec_yapyjit },
     { 0, NULL }
 };
 

@@ -7,19 +7,33 @@ namespace yapyjit {
 
 	};
 
-	template<auto pycall>
-	auto guarded(PyObject * self, PyObject * args) {
-		try {
-			decltype(pycall(nullptr, nullptr)) (*fnp)(PyObject*, PyObject*);
-			fnp = (decltype(fnp))pycall;
-			return fnp(self, args);
+	template<typename T> struct _errorval_helper;
+	template<> struct _errorval_helper<int> { static const int v = -1; };
+	template<> struct _errorval_helper<long long> { static const long long v = -1; };
+	template<typename T> struct _errorval_helper<T*> { static inline T* v = nullptr; };
+
+	template<auto>
+	struct _guarded_helper;
+
+	template<typename retT, typename ...argT, retT (*func)(argT...)>
+	struct _guarded_helper<func> {
+		using func_ptr_t = retT(*)(argT...);
+		static retT impl(argT... args) {
+			try {
+				return func(args...);
+			}
+			catch (registered_pyexc&) {
+				return _errorval_helper<retT>::v;
+			}
+			catch (std::exception& other) {
+				PyErr_SetString(PyExc_RuntimeError, other.what());
+				return _errorval_helper<retT>::v;
+			}
 		}
-		catch (registered_pyexc&) {
-			return decltype(pycall(nullptr, nullptr))();
-		}
-		catch (std::exception& other) {
-			PyErr_SetString(PyExc_RuntimeError, other.what());
-			return decltype(pycall(nullptr, nullptr))();
-		}
+	};
+
+	template<auto func>
+	constexpr auto guarded() {
+		return _guarded_helper<func>::impl;
 	}
-}
+};
