@@ -73,7 +73,7 @@ wf_mir(WrappedFunctionObject* self, PyObject* args) {
 }
 
 static PyMethodDef wf_methods[] = {
-    {"mir", yapyjit::guarded<(PyCFunction)wf_mir>, METH_VARARGS,
+    {"mir", yapyjit::guarded<wf_mir>, METH_VARARGS,
      "Dumps the generated MIR into file provided by path as argument 0."
     },
     {NULL}  /* Sentinel */
@@ -96,7 +96,7 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_flags = Py_TPFLAGS_DEFAULT;
 
     wf_type.tp_new = wf_new;
-    wf_type.tp_init = (initproc)yapyjit::guarded<(PyCFunction)wf_init>;
+    wf_type.tp_init = (initproc)yapyjit::guarded<wf_init>;
     wf_type.tp_dealloc = (destructor)wf_dealloc;
     wf_type.tp_members = wf_members;
     wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extattrdict);

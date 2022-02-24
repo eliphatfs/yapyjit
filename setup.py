@@ -10,7 +10,7 @@ with open("README.md", "r") as fh:
 cc_args = []
 cl_args = []
 if platform.system() == 'Windows':
-    cc_args += ['/DEBUG', '/Z7']
+    cc_args += ['/DEBUG', '/Z7', '/std:c++17']
     cl_args += ['/DEBUG']
 else:
     cc_args += ['-D__FUNCTION__=""', '-fpermissive']
