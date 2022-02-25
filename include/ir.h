@@ -26,6 +26,28 @@
  */
 
 namespace yapyjit {
+	BETTER_ENUM(
+		InsnTag, int,
+		BINOP = 1,
+		BUILD,
+		CALL,
+		COMPARE,
+		CONSTANT,
+		DELATTR,
+		DELITEM,
+		ITERNEXT,
+		JUMP,
+		JUMPTRUTHY,
+		LABEL,
+		LOADATTR,
+		LOADGLOBAL,
+		LOADITEM,
+		MOVE,
+		RETURN,
+		STOREATTR,
+		STOREITEM,
+		UNARYOP
+	)
 
 	BETTER_ENUM(
 		Op2ary, int, Add = 1, Sub = 2, Mult = 3, MatMult = 4, Div = 5, Mod = 6, Pow = 7,
@@ -49,12 +71,18 @@ namespace yapyjit {
 	public:
 		virtual ~Instruction() = default;
 		virtual std::string pretty_print() = 0;
+		virtual InsnTag tag() = 0;
 		virtual void emit(Function* func) = 0;
 		virtual bool control_leaves() { return false; }
 	};
 
+	template<int T_tag>
+	class InsnWithTag : public Instruction {
+		virtual InsnTag tag() { return InsnTag::_from_integral(T_tag); }
+	};
+
 	// Empty nop instruction designated for use as labels
-	class LabelIns: public Instruction {
+	class LabelIns: public InsnWithTag<InsnTag::LABEL> {
 	public:
 		virtual std::string pretty_print() {
 			return "@" + std::to_string((intptr_t)this);
@@ -62,7 +90,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class ReturnIns : public Instruction {
+	class ReturnIns : public InsnWithTag<InsnTag::RETURN> {
 	public:
 		int src;
 		ReturnIns(int local_id) : src(local_id) {}
@@ -73,7 +101,7 @@ namespace yapyjit {
 		virtual bool control_leaves() { return true; }
 	};
 
-	class MoveIns : public Instruction {
+	class MoveIns : public InsnWithTag<InsnTag::MOVE> {
 	public:
 		int dst;
 		int src;
@@ -85,7 +113,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class BinOpIns : public Instruction {
+	class BinOpIns : public InsnWithTag<InsnTag::BINOP> {
 	public:
 		int dst, left, right;
 		Op2ary op;
@@ -99,7 +127,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class UnaryOpIns : public Instruction {
+	class UnaryOpIns : public InsnWithTag<InsnTag::UNARYOP> {
 	public:
 		int dst, operand;
 		Op1ary op;
@@ -113,7 +141,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class CompareIns : public Instruction {
+	class CompareIns : public InsnWithTag<InsnTag::COMPARE> {
 	public:
 		int dst, left, right;
 		OpCmp op;
@@ -127,7 +155,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class JumpIns : public Instruction {
+	class JumpIns : public InsnWithTag<InsnTag::JUMP> {
 	public:
 		LabelIns * target;
 		JumpIns(LabelIns * target_): target(target_) {}
@@ -138,7 +166,7 @@ namespace yapyjit {
 		virtual bool control_leaves() { return true; }
 	};
 
-	class JumpTruthyIns : public Instruction {
+	class JumpTruthyIns : public InsnWithTag<InsnTag::JUMPTRUTHY> {
 	public:
 		LabelIns* target;
 		int cond;
@@ -150,7 +178,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class LoadAttrIns : public Instruction {
+	class LoadAttrIns : public InsnWithTag<InsnTag::LOADATTR> {
 	public:
 		std::string name;
 		int dst;
@@ -164,7 +192,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class StoreAttrIns : public Instruction {
+	class StoreAttrIns : public InsnWithTag<InsnTag::STOREATTR> {
 	public:
 		std::string name;
 		int dst;
@@ -178,7 +206,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class DelAttrIns : public Instruction {
+	class DelAttrIns : public InsnWithTag<InsnTag::DELATTR> {
 	public:
 		std::string name;
 		int dst;
@@ -190,7 +218,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class LoadItemIns : public Instruction {
+	class LoadItemIns : public InsnWithTag<InsnTag::LOADITEM> {
 	public:
 		int subscr;
 		int dst;
@@ -204,7 +232,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class StoreItemIns : public Instruction {
+	class StoreItemIns : public InsnWithTag<InsnTag::STOREITEM> {
 	public:
 		int subscr;
 		int dst;
@@ -218,7 +246,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class DelItemIns : public Instruction {
+	class DelItemIns : public InsnWithTag<InsnTag::DELITEM> {
 	public:
 		int subscr;
 		int dst;
@@ -231,7 +259,7 @@ namespace yapyjit {
 	};
 
 	// This is a 'large' instruction that I am not quite in favor of.
-	class IterNextIns : public Instruction {
+	class IterNextIns : public InsnWithTag<InsnTag::ITERNEXT> {
 	public:
 		LabelIns* iterFailTo;
 		int dst;
@@ -251,7 +279,7 @@ namespace yapyjit {
 		DICT = 1, LIST, SET, TUPLE
 	)
 
-	class BuildIns : public Instruction {
+	class BuildIns : public InsnWithTag<InsnTag::BUILD> {
 	public:
 		BuildInsMode mode;
 		int dst;
@@ -270,7 +298,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class ConstantIns : public Instruction {
+	class ConstantIns : public InsnWithTag<InsnTag::CONSTANT> {
 	public:
 		int dst;
 		ManagedPyo obj;
@@ -283,7 +311,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class LoadGlobalIns : public Instruction {
+	class LoadGlobalIns : public InsnWithTag<InsnTag::LOADGLOBAL> {
 	public:
 		int dst;
 		std::string name;
@@ -296,7 +324,7 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
-	class CallIns : public Instruction {
+	class CallIns : public InsnWithTag<InsnTag::CALL> {
 	public:
 		int dst, func;
 		std::vector<int> args;

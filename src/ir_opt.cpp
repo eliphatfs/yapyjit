@@ -8,8 +8,7 @@ namespace yapyjit {
 				if (!dc_region) new_instructions.push_back(std::move(insn));
 				dc_region = true;
 			}
-			// FIXME
-			else if (dynamic_cast<LabelIns*>(insn.get())) {
+			else if (insn->tag() == +InsnTag::LABEL) {
 				dc_region = false;
 			}
 			if (!dc_region) new_instructions.push_back(std::move(insn));
