@@ -57,6 +57,12 @@ static PyMemberDef wf_members[] = {
 };
 
 static PyObject*
+wf_descr_get(PyObject* self, PyObject* obj, PyObject* type) {
+    if (obj == Py_None) return self;
+    else return PyMethod_New(self, obj);
+}
+
+static PyObject*
 wf_mir(WrappedFunctionObject* self, PyObject* args) {
     const char* fp_parsed;
     if (!PyArg_ParseTuple(args, "s", &fp_parsed)) {
@@ -102,6 +108,7 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extattrdict);
     wf_type.tp_methods = wf_methods;
     wf_type.tp_call = (ternaryfunc)wf_call;
+    wf_type.tp_descr_get = wf_descr_get;
 
     if (PyType_Ready(&wf_type) < 0)
         return -1;

@@ -25,6 +25,10 @@ def attribute_tester(x):
     return x
 
 
+@yapyjit.jit
+def jitted_call_member_function(x):
+    return x.f()
+
 
 class TestMembers(unittest.TestCase):
 
@@ -32,6 +36,10 @@ class TestMembers(unittest.TestCase):
         a = A()
         self.assertEqual(a.x, 45)
         self.assertEqual(a.f(), 46)
+
+    def test_jitted_call(self):
+        a = A()
+        self.assertEqual(jitted_call_member_function(a), 46)
 
     def test_jitted_attributes(self):
         attribute_tester.test_attr = 174
