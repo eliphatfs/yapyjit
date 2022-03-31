@@ -342,6 +342,12 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class DefUseResult {
+	public:
+		std::vector<std::vector<Instruction*>> def, use;
+		DefUseResult(size_t var_cnt): def(var_cnt), use(var_cnt) { }
+	};
+
 	class Function {
 	public:
 		ManagedPyo globals_ns;
@@ -376,5 +382,6 @@ namespace yapyjit {
 		}
 
 		void dce();
+		DefUseResult loc_defuse();
 	};
 };
