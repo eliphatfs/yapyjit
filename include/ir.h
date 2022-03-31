@@ -46,7 +46,10 @@ namespace yapyjit {
 		RETURN,
 		STOREATTR,
 		STOREITEM,
-		UNARYOP
+		UNARYOP,
+		// C_ insns will not exist before combining insns/peephole opt
+		// We do not need to include these in analysis
+		C_CALLMTHD
 	)
 
 	BETTER_ENUM(
@@ -342,6 +345,26 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class CallMthdIns : public InsnWithTag<InsnTag::C_CALLMTHD> {
+	public:
+		int dst, obj;
+		std::string mthd;
+		std::vector<int> args;
+		std::unique_ptr<Instruction> orig_lda, orig_call;
+		CallMthdIns(int dst_local_id, int obj_local_id, const std::string& method_name, const std::vector<int>& args_v, std::unique_ptr<Instruction>&& original_lda, std::unique_ptr<Instruction>&& original_call)
+			: dst(dst_local_id), obj(obj_local_id), mthd(method_name), args(args_v), orig_lda(std::move(original_lda)), orig_call(std::move(original_call)) {
+		}
+		virtual std::string pretty_print() {
+			std::string res = "call.mthd $" + std::to_string(dst) + " <- $" + std::to_string(obj) + "." + mthd + "(";
+			for (size_t i = 0; i < args.size(); i++) {
+				if (i != 0) res += ", ";
+				res += "$" + std::to_string(args[i]);
+			}
+			return res + ")";
+		}
+		virtual void emit(Function* func);
+	};
+
 	class DefUseResult {
 	public:
 		std::vector<std::vector<Instruction*>> def, use;
@@ -383,5 +406,6 @@ namespace yapyjit {
 
 		void dce();
 		DefUseResult loc_defuse();
+		void peephole();
 	};
 };

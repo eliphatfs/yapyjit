@@ -17,7 +17,7 @@ namespace yapyjit {
 	}
 
 	DefUseResult Function::loc_defuse() {
-		DefUseResult result(locals.size());
+		DefUseResult result(locals.size() + 1);
 		for (auto& insn : instructions) {
 			switch (insn->tag()) {
 			case InsnTag::BINOP: {
@@ -126,5 +126,36 @@ namespace yapyjit {
 			}
 		}
 		return result;
+	}
+
+	void Function::peephole() {
+		std::vector<std::unique_ptr<Instruction>> new_instructions;
+		DefUseResult defuse = loc_defuse();
+
+		// lda, call -> call_mthd
+		size_t i;
+		for (i = 0; i + 1 < instructions.size(); i++) {
+			if (instructions[i]->tag() == +InsnTag::LOADATTR
+				&& instructions[i + 1]->tag() == +InsnTag::CALL) {
+				auto lda = (LoadAttrIns*)instructions[i].get();
+				auto call = (CallIns*)instructions[i + 1].get();
+				if (lda->dst == call->func
+					&& defuse.use[lda->dst].size() == 1
+					&& defuse.def[lda->dst].size() == 1) {
+					assert(defuse.use[lda->dst][0] == call);
+					assert(defuse.def[lda->dst][0] == lda);
+					new_instructions.push_back(std::unique_ptr<Instruction>(
+						new CallMthdIns(call->dst, lda->src, lda->name, call->args, std::move(instructions[i]), std::move(instructions[i + 1]))
+					));
+					i++;
+				}
+			}
+			else {
+				new_instructions.push_back(std::move(instructions[i]));
+			}
+		}
+		if (i < instructions.size())
+			new_instructions.push_back(std::move(instructions[i]));
+		instructions.swap(new_instructions);
 	}
 };

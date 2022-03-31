@@ -400,6 +400,146 @@ namespace yapyjit {
 		}
 	}
 
+	static int _PyObject_GetMethod_Copy(PyObject* obj, PyObject* name, PyObject** method) {
+		PyTypeObject* tp = Py_TYPE(obj);
+		PyObject* descr;
+		descrgetfunc f = NULL;
+		PyObject** dictptr, * dict;
+		PyObject* attr;
+		int meth_found = 0;
+
+		// assert(*method == NULL);
+
+		if (tp->tp_getattro != PyObject_GenericGetAttr) {
+			*method = PyObject_GetAttr(obj, name);
+			return 0;
+		}
+
+		if (tp->tp_dict == NULL && PyType_Ready(tp) < 0)
+			return 0;
+
+		descr = _PyType_Lookup(tp, name);
+		if (descr != NULL) {
+			Py_INCREF(descr);
+			if (PyType_HasFeature(Py_TYPE(descr), Py_TPFLAGS_METHOD_DESCRIPTOR)) {
+				meth_found = 1;
+			}
+			else {
+				f = descr->ob_type->tp_descr_get;
+				if (f != NULL && PyDescr_IsData(descr)) {
+					*method = f(descr, obj, (PyObject*)obj->ob_type);
+					Py_DECREF(descr);
+					return 0;
+				}
+			}
+		}
+
+		dictptr = _PyObject_GetDictPtr(obj);
+		if (dictptr != NULL && (dict = *dictptr) != NULL) {
+			Py_INCREF(dict);
+			attr = PyDict_GetItemWithError(dict, name);
+			if (attr != NULL) {
+				Py_INCREF(attr);
+				*method = attr;
+				Py_DECREF(dict);
+				Py_XDECREF(descr);
+				return 0;
+			}
+			else {
+				Py_DECREF(dict);
+				if (PyErr_Occurred()) {
+					Py_XDECREF(descr);
+					return 0;
+				}
+			}
+		}
+
+		if (meth_found) {
+			*method = descr;
+			return 1;
+		}
+
+		if (f != NULL) {
+			*method = f(descr, obj, (PyObject*)Py_TYPE(obj));
+			Py_DECREF(descr);
+			return 0;
+		}
+
+		if (descr != NULL) {
+			*method = descr;
+			return 0;
+		}
+
+		PyErr_Format(PyExc_AttributeError,
+					 "'%.50s' object has no attribute '%U'",
+					 tp->tp_name, name);
+		return 0;
+	}
+
+	void CallMthdIns::emit(Function* ctx) {
+		auto emit_ctx = ctx->emit_ctx.get();
+		auto target = ctx->emit_ctx->get_reg(dst);
+		auto objreg = ctx->emit_ctx->get_reg(obj);
+		auto is_bound_mthd = emit_ctx->new_temp_reg(MIR_T_I64);
+		auto attr_obj = ManagedPyo(
+			PyUnicode_FromString(mthd.c_str())
+		);
+		ctx->emit_keeprefs.push_back(attr_obj);
+		auto mthd_obj = (PyObject**)ctx->allocate_fill(sizeof(PyObject*));
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIRType<int>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)_PyObject_GetMethod_Copy, is_bound_mthd, objreg, (int64_t)attr_obj.borrow(), (intptr_t)mthd_obj
+		});
+		auto lab_deopt = emit_jump_if_not(emit_ctx, is_bound_mthd);
+		// opt code
+		// TODO: deduplicate with call?
+		auto pyfn = emit_ctx->new_temp_reg(MIR_T_I64);
+		emit_ctx->append_insn(MIR_MOV, {
+			pyfn,
+			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)mthd_obj)
+		});
+		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size() + 1);
+		if (!tuple_fill) throw registered_pyexc();
+		ctx->emit_keeprefs.push_back(ManagedPyo(tuple_fill));
+
+		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
+		emit_ctx->append_insn(MIR_MOV, {
+			MIRMemOp(
+				MIR_T_P, MIRRegOp(0),
+				(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item)
+			),
+			objreg
+		});
+		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill) - 1; i++) {
+			emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(
+					MIR_T_P, MIRRegOp(0),
+					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + (1 + i) * sizeof(PyObject*)
+				),
+				ctx->emit_ctx->get_reg(args[i])
+			});
+		}
+		emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
+			ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)nullptr
+		);
+
+		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
+			emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(
+					MIR_T_P, MIRRegOp(0),
+					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
+				),
+				0
+			});
+		}
+		auto end_label = emit_ctx->new_label();
+		emit_ctx->append_insn(MIR_JMP, { end_label });
+		emit_ctx->append_label(lab_deopt);
+		orig_lda->emit(ctx);
+		orig_call->emit(ctx);
+		emit_ctx->append_label(end_label);
+	}
+
 	MIR_item_t generate_mir(Function& func) {
 		auto mod = mir_ctx.new_module(func.name);
 		func.emit_ctx = mod->new_func(func.name, MIR_T_P, { MIR_T_P, MIR_T_P });
