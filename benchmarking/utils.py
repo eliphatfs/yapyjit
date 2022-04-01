@@ -1,8 +1,17 @@
 import types
 import yapyjit
+import os
+
+
+def postfix():
+    if os.environ.get("YAPYJIT_EN") == "DISABLE":
+        return "nojit"
+    return "jit"
 
 
 def jittify(globals_dict):
+    if os.environ.get("YAPYJIT_EN") == "DISABLE":
+        return
     for key, obj in globals_dict.items():
         if isinstance(obj, type) and issubclass(obj, object):
             for attr in dir(obj):
