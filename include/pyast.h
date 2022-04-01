@@ -595,7 +595,8 @@ namespace yapyjit {
 	};
 
 	inline void assn_ir(Function& appender, AST* dst, int src) {
-		// TODO: starred, destruct, non-local
+		// TODO: starred, non-local
+		std::vector<std::unique_ptr<AST>>* destruct_targets = nullptr;
 		switch (dst->tag())
 		{
 		case ASTTag::NAME: {
@@ -612,16 +613,16 @@ namespace yapyjit {
 				{ id, (int)appender.locals.size() + 1 }
 			).first;  // second is success
 			appender.new_insn(new MoveIns(vid->second, src));
-		}
 			break;
+		}
 		case ASTTag::ATTR: {
 			const Attribute* dst_attr = (Attribute*)dst;
 			appender.new_insn(new StoreAttrIns(
 				dst_attr->attr, dst_attr->expr->emit_ir(appender),
 				src
 			));
+			break;
 		}
-		    break;
 		case ASTTag::SUBSCR: {
 			const Subscript* dst_attr = (Subscript*)dst;
 			auto dst_tv = dst_attr->expr->emit_ir(appender);
@@ -629,13 +630,33 @@ namespace yapyjit {
 				dst_attr->slice->emit_ir(appender), dst_tv,
 				src
 			));
+			break;
 		}
+		case ASTTag::LIST:
+			destruct_targets = &((List*)dst)->elts;
+			break;
+		case ASTTag::TUPLE:
+			destruct_targets = &((Tuple*)dst)->elts;
 			break;
 		default:
 			throw std::invalid_argument(
 				std::string(__FUNCTION__" got unsupported target with kind ")
 				+ dst->tag()._to_string()
 			);
+		}
+		if (destruct_targets != nullptr) {
+			// TODO: optimize by stashing all elm into mem first
+			for (size_t i = 0; i < destruct_targets->size(); i++) {
+				auto visit = new_temp_var(appender);
+				auto idx = new_temp_var(appender);
+				appender.new_insn(new ConstantIns(
+					idx, ManagedPyo(PyLong_FromLong(i), true)
+				));
+				appender.new_insn(new LoadItemIns(
+					idx, visit, src
+				));
+				assn_ir(appender, destruct_targets->at(i).get(), visit);
+			}
 		}
 	}
 

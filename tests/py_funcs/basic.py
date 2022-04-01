@@ -147,3 +147,14 @@ def del_sub():
     del c.x
     assert len(A().__dict__) != len(c.__dict__)
     return len(a), len(b), len(c.__dict__), len(A().__dict__)
+
+
+def destructuring_1():
+    a, b, c = 1, 2, 3
+    return a, b, c
+
+
+def destructuring_2():
+    x = [1] * 5
+    [a, b, c, d, e] = x
+    return a, b, c, d, e

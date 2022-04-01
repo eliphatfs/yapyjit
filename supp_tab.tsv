@@ -21,6 +21,6 @@ Break 	1		Attribute	1
 Continue	1		Subscript	1
 			Starred	
 			Name	1
-			List	P
-			Tuple	P
+			List	1
+			Tuple	1
 			Slice	1
