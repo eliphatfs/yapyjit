@@ -108,8 +108,7 @@ def _visit_class(a):
     if a.x != 3:
         a.x = 3 + random.randint(-1, 1)
         return _visit_class(a)
-    else:
-        return a.x
+    return a.x
 
 
 def visit_class():

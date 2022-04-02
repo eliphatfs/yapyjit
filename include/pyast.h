@@ -290,12 +290,14 @@ namespace yapyjit {
 
 		virtual int emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
+			std::vector<int> argvec;
+			for (auto& arg : args) {
+				argvec.push_back(arg->emit_ir(appender));
+			}
 			auto call_ins = new CallIns(
 				result, func->emit_ir(appender)
 			);
-			for (auto& arg : args) {
-				call_ins->args.push_back(arg->emit_ir(appender));
-			}
+			call_ins->args.swap(argvec);
 			appender.new_insn(call_ins);
 			return result;
 		}
