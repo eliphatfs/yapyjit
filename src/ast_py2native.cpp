@@ -27,6 +27,93 @@ namespace yapyjit {
 		if (!obj) throw std::logic_error(__FUNCTION__" cannot get builtins." + name + ".");
 		return std::make_unique<Constant>(ManagedPyo(obj, true));
 	}
+	void recursive_var_replacement(ManagedPyo ast_man, ManagedPyo oldv, ManagedPyo newv) {
+		auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
+		auto name_type = ast_mod.attr("Name");
+		for (auto node : ast_mod.attr("walk").call(ast_man).list()) {
+			if (node.type().ref_eq(name_type)) {
+				if (PyObject_RichCompareBool(node.attr("id").borrow(), oldv.borrow(), Py_EQ)) {
+					node.attr("id", newv);
+				}
+			}
+		}
+	}
+	void collect_comprehension_binds(std::vector<ManagedPyo>& names, ManagedPyo target) {
+		switch (simple_hash(target.type().attr("__name__").to_cstr())) {
+			TARGET(Name) {
+				names.push_back(target.attr("id"));
+				break;
+			}
+			TARGET(List)
+			TARGET(Tuple) {
+				for (auto sub : target.attr("elts")) {
+					collect_comprehension_binds(names, sub);
+				}
+				break;
+			}
+		}
+	}
+	std::unique_ptr<AST> lower_comprehension(ManagedPyo ast_man, ManagedPyo init_callable, ManagedPyo add_callable) {
+		auto result = std::make_unique<ValueBlock>();
+		auto init_fn = new Constant(init_callable);
+		std::vector<std::unique_ptr<AST>> args_init;
+		auto comp_name = std::string("_yapyjit_comp_r_") + std::to_string((intptr_t)ast_man.borrow());
+		std::vector<std::unique_ptr<AST>> assned;
+		assned.push_back(std::unique_ptr<AST>(new Name(comp_name)));
+		result->new_stmt(new Assign(
+			std::unique_ptr<AST>(new Call(std::unique_ptr<AST>(init_fn), args_init)),
+			assned
+		));
+		std::vector<ManagedPyo> names;
+		for (auto gen : ast_man.attr("generators")) {
+			collect_comprehension_binds(names, gen.attr("target"));
+		}
+		for (auto old_name : names) {
+			auto new_name = ManagedPyo::from_str("_yapyjit_comp_").attr("__add__").call(old_name);
+			recursive_var_replacement(ast_man.attr("elt"), old_name, new_name);
+			bool first = true;
+			for (auto gen : ast_man.attr("generators")) {
+				recursive_var_replacement(gen.attr("target"), old_name, new_name);
+				for (auto cond : gen.attr("ifs")) {
+					recursive_var_replacement(cond, old_name, new_name);
+				}
+				if (!first) {
+					recursive_var_replacement(gen.attr("iter"), old_name, new_name);
+				}
+				first = false;
+			}
+		}
+		std::vector<std::unique_ptr<AST>> args_add;
+		args_add.push_back(std::unique_ptr<AST>(new Name(comp_name)));
+		args_add.push_back(ast_py2native(ast_man.attr("elt")));
+		AST* current = new Call(
+			std::unique_ptr<AST>(new Constant(add_callable)), args_add
+		);
+		auto it = ast_man.attr("generators").end();
+		while (it != ast_man.attr("generators").begin())
+		{
+			--it;
+			for (auto cond : (*it).attr("ifs")) {
+				std::vector<std::unique_ptr<AST>> body, orelse;
+				body.push_back(std::unique_ptr<AST>(current));
+				current = new If(
+					ast_py2native(cond), body, orelse
+				);
+			}
+			{
+				std::vector<std::unique_ptr<AST>> body, orelse;
+				body.push_back(std::unique_ptr<AST>(current));
+				current = new For(
+					ast_py2native((*it).attr("target")),
+					ast_py2native((*it).attr("iter")),
+					body, orelse
+				);
+			}
+		}
+		result->new_stmt(current);
+		result->new_stmt(new Name(comp_name));
+		return result;
+	}
 	std::unique_ptr<AST> ast_py2native(ManagedPyo ast_man) {
 		// auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
 		switch (simple_hash(ast_man.type().attr("__name__").to_cstr())) {
@@ -108,6 +195,16 @@ namespace yapyjit {
 				for (auto val : ast_man.attr("elts"))
 					elts.push_back(ast_py2native(val));
 				return std::make_unique<Tuple>(elts);
+			}
+			TARGET(ListComp) {
+				ManagedPyo init_callable((PyObject*)&PyList_Type, true);
+				ManagedPyo add_callable = init_callable.attr("append");
+				return lower_comprehension(ast_man, init_callable, add_callable);
+			}
+			TARGET(SetComp) {
+				ManagedPyo init_callable((PyObject*)&PySet_Type, true);
+				ManagedPyo add_callable = init_callable.attr("add");
+				return lower_comprehension(ast_man, init_callable, add_callable);
 			}
 			TARGET(Compare) {
 				std::vector<OpCmp> ops{};

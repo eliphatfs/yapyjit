@@ -158,3 +158,17 @@ def destructuring_2():
     x = [1] * 5
     [a, b, c, d, e] = x
     return a, b, c, d, e
+
+
+def comprehension_1():
+    return [x for x in range(10)], {x for x in range(10)}
+
+
+def comprehension_2():
+    return [y for x in range(10) for y in range(x) if x % 2 == 0 if y % 2 == 0]
+
+
+def comprehension_3():
+    a = '12345'
+    b = [a for a in a if a in a for a in a if a in a if a in a]
+    return a, b

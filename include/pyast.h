@@ -45,6 +45,8 @@ namespace yapyjit {
 		CONTINUE,
 		FUNCDEF,
 
+		EXT_VALUEBLOCK,
+
 		ANN_ASSIGN,
 		EXPR,
 		PASS
@@ -549,6 +551,22 @@ namespace yapyjit {
 			}
 			appender.add_insn(std::move(lab_e));
 			return -1;
+		}
+	};
+
+	class ValueBlock : public ASTWithTag<ASTTag::EXT_VALUEBLOCK> {
+	public:
+		// A block. Its value is the last expression.
+		std::vector<std::unique_ptr<AST>> body_stmts;
+		virtual int emit_ir(Function& appender) {
+			int result = -1;
+			for (auto& stmt : body_stmts) {
+				result = stmt->emit_ir(appender);
+			}
+			return result;
+		}
+		void new_stmt(AST* nast) {
+			body_stmts.push_back(std::unique_ptr<AST>(nast));
 		}
 	};
 

@@ -21,6 +21,10 @@ namespace yapyjit {
 				++_idx; return *this;
 			}
 
+			_mpyo_seq_iter& operator--() {
+				--_idx; return *this;
+			}
+
 			ManagedPyo operator*() const {
 				assert(_idx >= 0 && _idx < _len);
 				return PySequence_GetItem(_par, (Py_ssize_t)_idx);
@@ -50,6 +54,10 @@ namespace yapyjit {
 			return PyObject_GetAttrString(_obj, name);
 		}
 
+		int attr(const char* name, ManagedPyo val) {
+			return PyObject_SetAttrString(_obj, name, val.borrow());
+		}
+
 		ManagedPyo type() const {
 			return PyObject_Type(_obj);
 		}
@@ -69,6 +77,10 @@ namespace yapyjit {
 
 		ManagedPyo repr() const {
 			return PyObject_Repr(_obj);
+		}
+
+		ManagedPyo list() const {
+			return PySequence_List(_obj);
 		}
 
 		const char* to_cstr() const {
@@ -109,6 +121,14 @@ namespace yapyjit {
 
 		bool operator==(PyObject* pyo) const {
 			return _obj == pyo;
+		}
+
+		static ManagedPyo from_int(long i) {
+			return ManagedPyo(PyLong_FromLong(i), true);
+		}
+
+		static ManagedPyo from_str(std::string s) {
+			return ManagedPyo(PyUnicode_FromString(s.c_str()), true);
 		}
 	};
 };
