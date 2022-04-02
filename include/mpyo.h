@@ -1,5 +1,6 @@
 #pragma once
 #include <stdexcept>
+#include <string>
 #include <Python.h>
 #include <exc_conv.h>
 // Managed PyObject for convenience.
