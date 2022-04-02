@@ -258,11 +258,11 @@ namespace yapyjit {
 			for (auto& comparator : comparators) {
 				comparators_res.push_back(comparator->emit_ir(appender));
 			}
-			for (int i = 0; i < ops.size(); i++) {
+			for (size_t i = 0; i < ops.size(); i++) {
 				appender.new_insn(new CompareIns(
 					result, ops[i], comparators_res[i], comparators_res[i + 1]
 				));
-				if (i == ops.size() - 1) break;
+				if (i + 1 == ops.size()) break;
 				appender.new_insn(new JumpTruthyIns(
 					lab_next.get(), result
 				));
@@ -608,7 +608,7 @@ namespace yapyjit {
 			);
 			appender->dce();
 			appender->peephole();
-			return std::move(appender);
+			return appender;
 		}
 	};
 

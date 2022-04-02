@@ -36,6 +36,6 @@ namespace yapyjit {
             throw std::runtime_error("BUG: AST root is not function definition.");
         }
 
-        return std::move(funcast->emit_ir_f());
+        return funcast->emit_ir_f();
     }
 }
