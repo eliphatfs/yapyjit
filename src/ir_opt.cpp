@@ -153,11 +153,10 @@ namespace yapyjit {
 						new CallMthdIns(call->dst, lda->src, lda->name, call->args, std::move(instructions[i]), std::move(instructions[i + 1]))
 					));
 					i++;
+					continue;
 				}
 			}
-			else {
-				new_instructions.push_back(std::move(instructions[i]));
-			}
+			new_instructions.push_back(std::move(instructions[i]));
 		}
 		if (i < instructions.size())
 			new_instructions.push_back(std::move(instructions[i]));
