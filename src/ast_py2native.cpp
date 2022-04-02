@@ -30,7 +30,7 @@ namespace yapyjit {
 	void recursive_var_replacement(ManagedPyo ast_man, ManagedPyo oldv, ManagedPyo newv) {
 		auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
 		auto name_type = ast_mod.attr("Name");
-		for (auto node : ast_mod.attr("walk").call(ast_man).list()) {
+		for (auto node : ast_mod.attr("walk").call(ast_man.borrow()).list()) {
 			if (node.type().ref_eq(name_type)) {
 				if (PyObject_RichCompareBool(node.attr("id").borrow(), oldv.borrow(), Py_EQ)) {
 					node.attr("id", newv);
@@ -69,7 +69,7 @@ namespace yapyjit {
 			collect_comprehension_binds(names, gen.attr("target"));
 		}
 		for (auto old_name : names) {
-			auto new_name = ManagedPyo::from_str("_yapyjit_comp_").attr("__add__").call(old_name);
+			auto new_name = ManagedPyo::from_str("_yapyjit_comp_").attr("__add__").call(old_name.borrow());
 			recursive_var_replacement(ast_man.attr("elt"), old_name, new_name);
 			bool first = true;
 			for (auto gen : ast_man.attr("generators")) {
