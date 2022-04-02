@@ -172,3 +172,15 @@ def comprehension_3():
     a = '12345'
     b = [a for a in a if a in a for a in a if a in a if a in a]
     return a, b
+
+
+def _extended_args(a, b, c=1, d=2):
+    return a, b, c, d
+
+
+def extended_args():
+    return [
+        _extended_args(1, 2),
+        _extended_args(1, 2, 3),
+        _extended_args(1, 2, 3, 4)
+    ]

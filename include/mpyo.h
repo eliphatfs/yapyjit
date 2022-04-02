@@ -92,6 +92,10 @@ namespace yapyjit {
 			return PyLong_AsLongLong(_obj);
 		}
 
+		int length() const {
+			return (int)PySequence_Length(_obj);
+		}
+
 		ManagedPyo operator[](int idx) {
 			return PySequence_GetItem(_obj, (Py_ssize_t)idx);
 		}
@@ -125,11 +129,11 @@ namespace yapyjit {
 		}
 
 		static ManagedPyo from_int(long i) {
-			return ManagedPyo(PyLong_FromLong(i), true);
+			return ManagedPyo(PyLong_FromLong(i));
 		}
 
 		static ManagedPyo from_str(std::string s) {
-			return ManagedPyo(PyUnicode_FromString(s.c_str()), true);
+			return ManagedPyo(PyUnicode_FromString(s.c_str()));
 		}
 	};
 };

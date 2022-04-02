@@ -1,3 +1,4 @@
+#include <map>
 #include <yapyjit.h>
 #include <ir.h>
 #include "structmember.h"
@@ -7,6 +8,8 @@ typedef struct {
     PyObject* wrapped;
     std::unique_ptr<yapyjit::Function> compiled;
     MIR_item_t generated;
+    std::map<std::string, int>* argidlookup;
+    std::vector<PyObject*>* defaults;
     PyObject* extattrdict;
 } WrappedFunctionObject;
 
@@ -15,6 +18,8 @@ wf_dealloc(WrappedFunctionObject* self)
 {
     Py_CLEAR(self->wrapped);
     self->compiled.reset(nullptr);
+    delete self->argidlookup;
+    delete self->defaults;
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -28,6 +33,8 @@ wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
         self->wrapped = Py_None;
         self->compiled = nullptr;
         self->generated = nullptr;
+        self->argidlookup = new std::map<std::string, int>();
+        self->defaults = new std::vector<PyObject*>();
     }
     return (PyObject*)self;
 }
@@ -45,6 +52,35 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
         Py_CLEAR(self->wrapped);
         self->wrapped = pyfunc;
 
+        auto inspect_mod = yapyjit::ManagedPyo(PyImport_ImportModule("inspect"));
+        auto spec = inspect_mod.attr("getfullargspec").call(pyfunc);
+        if (spec.attr("varargs") == Py_None && spec.attr("varkw") == Py_None) {
+            for (auto arg : spec.attr("args")) {
+                (*self->argidlookup)[arg.to_cstr()] = self->defaults->size();
+                self->defaults->push_back(nullptr);
+            }
+            if (!(spec.attr("defaults") == Py_None)) {
+                int start = spec.attr("args").length() - spec.attr("defaults").length();
+                for (auto val : spec.attr("defaults")) {
+                    (*self->defaults)[start++] = val.borrow();
+                }
+            }
+            for (auto arg : spec.attr("kwonlyargs")) {
+                (*self->argidlookup)[arg.to_cstr()] = self->defaults->size();
+                self->defaults->push_back(nullptr);
+            }
+            PyObject* key, * value;
+            Py_ssize_t pos = 0;
+            auto kwonlydef = spec.attr("kwonlydefaults");
+            while (PyDict_Next(kwonlydef.borrow(), &pos, &key, &value)) {
+                assert(PyUnicode_CheckExact(key));
+                auto name = PyUnicode_AsUTF8(key);
+                (*self->defaults)[self->argidlookup->at(name)] = value;
+            }
+        }
+        else {
+            throw std::invalid_argument(std::string("varargs and varkw funcs are not supported yet."));
+        }
         self->compiled = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc));
         self->generated = yapyjit::generate_mir(*self->compiled);
     }
@@ -91,7 +127,38 @@ static PyTypeObject wf_type = {
 
 static PyObject*
 wf_call(WrappedFunctionObject* self, PyObject* args, PyObject* kwargs) {
-    return ((PyCFunction)(self->generated->addr))((PyObject*)self, args);
+    assert(PyTuple_CheckExact(args));
+    PyObject* newargs = nullptr;
+    Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
+    if (kwargs || PyTuple_GET_SIZE(args) < nargs) {
+        newargs = PyTuple_New(self->defaults->size());
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(args); i++) {
+            PyTuple_SET_ITEM(newargs, i, PyTuple_GET_ITEM(args, i));
+        }
+        for (Py_ssize_t i = PyTuple_GET_SIZE(args); i < nargs; i++) {
+            PyTuple_SET_ITEM(newargs, i, self->defaults->at(i));
+        }
+        args = newargs;
+    }
+    if (kwargs) {
+        assert(PyDict_CheckExact(kwargs));
+        PyObject* key, * value;
+        Py_ssize_t pos = 0;
+
+        while (PyDict_Next(kwargs, &pos, &key, &value)) {
+            assert(PyUnicode_CheckExact(key));
+            auto name = PyUnicode_AsUTF8(key);
+            PyTuple_SET_ITEM(newargs, self->argidlookup->at(name), value);
+        }
+    }
+    auto result = ((PyCFunction)(self->generated->addr))((PyObject*)self, args);
+    if (newargs) {
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(newargs); i++) {
+            PyTuple_SET_ITEM(newargs, i, NULL);
+        }
+        Py_DECREF(newargs);
+    }
+    return result;
 }
 
 int yapyjit::initialize_wf(PyObject* m) {
