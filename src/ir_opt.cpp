@@ -98,6 +98,11 @@ namespace yapyjit {
 				result.use[insn_b->src].push_back(insn_b);
 				break;
 			}
+			case InsnTag::RAISE: {
+				auto insn_b = (RaiseIns*)insn.get();
+				result.use[insn_b->exc].push_back(insn_b);
+				break;
+			}
 			case InsnTag::RETURN: {
 				auto insn_b = (ReturnIns*)insn.get();
 				result.use[insn_b->src].push_back(insn_b);

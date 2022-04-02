@@ -43,6 +43,7 @@ namespace yapyjit {
 		LOADGLOBAL,
 		LOADITEM,
 		MOVE,
+		RAISE,
 		RETURN,
 		STOREATTR,
 		STOREITEM,
@@ -91,6 +92,17 @@ namespace yapyjit {
 			return "@" + std::to_string((intptr_t)this);
 		}
 		virtual void emit(Function* func);
+	};
+
+	class RaiseIns : public InsnWithTag<InsnTag::RAISE> {
+	public:
+		int exc;
+		RaiseIns(int local_id) : exc(local_id) {}
+		virtual std::string pretty_print() {
+			return "raise $" + std::to_string(exc);
+		}
+		virtual void emit(Function* func);
+		virtual bool control_leaves() { return true; }
 	};
 
 	class ReturnIns : public InsnWithTag<InsnTag::RETURN> {

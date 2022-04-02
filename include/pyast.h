@@ -41,6 +41,7 @@ namespace yapyjit {
 		FOR,
 		WHILE,
 		IF,
+		RAISE,
 		BREAK,
 		CONTINUE,
 		FUNCDEF,
@@ -550,6 +551,18 @@ namespace yapyjit {
 				stmt->emit_ir(appender);
 			}
 			appender.add_insn(std::move(lab_e));
+			return -1;
+		}
+	};
+
+	class Raise : public ASTWithTag<ASTTag::RAISE> {
+	public:
+		std::unique_ptr<AST> exc;
+		Raise(std::unique_ptr<AST>&& exc_) : exc(std::move(exc_)) {
+		}
+		virtual int emit_ir(Function& appender) {
+			auto exc_v = exc->emit_ir(appender);
+			appender.new_insn(new RaiseIns(exc_v));
 			return -1;
 		}
 	};

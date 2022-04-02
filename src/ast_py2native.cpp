@@ -307,6 +307,12 @@ namespace yapyjit {
 			TARGET(NameConstant) {
 				return std::make_unique<Constant>(ast_man.attr("value"));
 			}
+			TARGET(Raise) {
+				auto val = ast_man.attr("exc");
+				return std::make_unique<Raise>(
+					ast_py2native(val)
+				);
+			}
 			TARGET(Return) {
 				auto val = ast_man.attr("value");
 				if (val == Py_None) {
