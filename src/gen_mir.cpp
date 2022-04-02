@@ -364,11 +364,8 @@ namespace yapyjit {
 		return nullptr;
 	}
 
-	void CallIns::emit(Function* ctx) {
+	void emit_call(Function* ctx, MIRRegOp target, MIRRegOp pyfn, const std::vector<int>& args) {
 		auto emit_ctx = ctx->emit_ctx.get();
-		auto target = ctx->emit_ctx->get_reg(dst);
-		auto pyfn = ctx->emit_ctx->get_reg(func);
-
 		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size());
 		if (!tuple_fill) throw registered_pyexc();
 		ctx->emit_keeprefs.push_back(ManagedPyo(tuple_fill));
@@ -398,6 +395,14 @@ namespace yapyjit {
 				0
 			});
 		}
+	}
+
+	void CallIns::emit(Function* ctx) {
+		auto emit_ctx = ctx->emit_ctx.get();
+		auto target = ctx->emit_ctx->get_reg(dst);
+		auto pyfn = ctx->emit_ctx->get_reg(func);
+
+		emit_call(ctx, target, pyfn, args);
 	}
 
 	static int _PyObject_GetMethod_Copy(PyObject* obj, PyObject* name, PyObject** method) {
@@ -492,46 +497,14 @@ namespace yapyjit {
 		});
 		auto lab_deopt = emit_jump_if_not(emit_ctx, is_bound_mthd);
 		// opt code
-		// TODO: deduplicate with call?
 		auto pyfn = emit_ctx->new_temp_reg(MIR_T_I64);
+		auto args_mod(args);
+		args_mod.insert(args_mod.begin(), obj);
 		emit_ctx->append_insn(MIR_MOV, {
 			pyfn,
 			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)mthd_obj)
 		});
-		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size() + 1);
-		if (!tuple_fill) throw registered_pyexc();
-		ctx->emit_keeprefs.push_back(ManagedPyo(tuple_fill));
-
-		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
-		emit_ctx->append_insn(MIR_MOV, {
-			MIRMemOp(
-				MIR_T_P, MIRRegOp(0),
-				(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item)
-			),
-			objreg
-		});
-		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill) - 1; i++) {
-			emit_ctx->append_insn(MIR_MOV, {
-				MIRMemOp(
-					MIR_T_P, MIRRegOp(0),
-					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + (1 + i) * sizeof(PyObject*)
-				),
-				ctx->emit_ctx->get_reg(args[i])
-			});
-		}
-		emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
-			ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)nullptr
-		);
-
-		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
-			emit_ctx->append_insn(MIR_MOV, {
-				MIRMemOp(
-					MIR_T_P, MIRRegOp(0),
-					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
-				),
-				0
-			});
-		}
+		emit_call(ctx, target, pyfn, args_mod);
 		auto end_label = emit_ctx->new_label();
 		emit_ctx->append_insn(MIR_JMP, { end_label });
 		emit_ctx->append_label(lab_deopt);
