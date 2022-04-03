@@ -35,7 +35,7 @@ for mi in pkgutil.walk_packages(py_funcs.__path__):
             continue
         module.__dict__[name] = yapyjit.jit(obj)
         if len(inspect.getfullargspec(obj).args) == 0:
-            members["test_" + name] = gen_testcase(tc_vs, name, obj)
+            members["test_" + name] = gen_testcase(tc_vs, name, module.__dict__[name])
     globals()[mi.name] = type(mi.name, (unittest.TestCase,), members)
 
 
