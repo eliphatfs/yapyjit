@@ -196,6 +196,7 @@ namespace yapyjit {
 					elts.push_back(ast_py2native(val));
 				return std::make_unique<Tuple>(elts);
 			}
+			TARGET(GeneratorExp)
 			TARGET(ListComp) {
 				ManagedPyo init_callable((PyObject*)&PyList_Type, true);
 				ManagedPyo add_callable = init_callable.attr("append");

@@ -173,6 +173,14 @@ def comprehension_3():
     return a, b
 
 
+def genexpr_eager():
+    return tuple(x for x in range(10) if x % 2 == 0)
+
+
+def genexpr_eager_2():
+    return max(x for x in range(1000) if (x * 137) % 31 == 0)
+
+
 def _extended_args(a, b, c=1, d=2):
     return a, b, c, d
 

@@ -10,7 +10,7 @@ If	1		Set	1
 With			ListComp	1
 Raise	P		SetComp	1
 Try			DictComp	
-Assert	1		GeneratorExp	
+Assert	1		GeneratorExp	P
 Import			Yield	
 ImportFrom			Compare	1
 Global			Call	P
