@@ -549,3 +549,4 @@ cython_debug/
 #.idea/
 micc.exe
 /deprecated/
+/mir_bug/
