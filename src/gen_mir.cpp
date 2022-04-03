@@ -32,6 +32,7 @@ namespace yapyjit {
 		for (auto local_pair : func->locals) {
 			emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(local_pair.second));
 		}
+		emit_disown(func->emit_ctx.get(), cls);
 		func->emit_ctx->append_insn(MIR_RET, { (intptr_t)nullptr });
 	}
 
@@ -380,7 +381,7 @@ namespace yapyjit {
 		return nullptr;
 	}
 
-	void emit_call(Function* ctx, MIRRegOp target, MIRRegOp pyfn, const std::vector<int>& args) {
+	void emit_call(Function* ctx, MIRRegOp target, MIRRegOp pyfn, const std::vector<int>& args, const std::map<std::string, int>& kwargs) {
 		auto emit_ctx = ctx->emit_ctx.get();
 		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size());
 		if (!tuple_fill) throw registered_pyexc();
@@ -398,9 +399,33 @@ namespace yapyjit {
 		}
 		// emit_debug_print_pyo(emit_ctx, pyfn);
 		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
-		emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
-			ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)nullptr
-		);
+		if (kwargs.size() == 0) {
+			emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
+				ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)nullptr
+			);
+		}
+		else {
+			auto kw_fill = PyDict_New();
+			if (!kw_fill) throw registered_pyexc();
+			ctx->emit_keeprefs.push_back(ManagedPyo(kw_fill));
+			for (const auto& kwarg : kwargs) {
+				emit_ctx->append_insn(MIR_CALL, {
+					emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+					(intptr_t)PyDict_SetItemString,
+					(intptr_t)kw_fill,
+					(intptr_t)kwarg.first.c_str(), ctx->emit_ctx->get_reg(kwarg.second)
+				});
+			}
+			emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
+				ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)kw_fill
+			);
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P}),
+				(intptr_t)PyDict_Clear,
+				(intptr_t)kw_fill
+			});
+
+		}
 
 		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
 			emit_ctx->append_insn(MIR_MOV, {
@@ -418,7 +443,7 @@ namespace yapyjit {
 		auto target = ctx->emit_ctx->get_reg(dst);
 		auto pyfn = ctx->emit_ctx->get_reg(func);
 
-		emit_call(ctx, target, pyfn, args);
+		emit_call(ctx, target, pyfn, args, kwargs);
 	}
 
 	static int _PyObject_GetMethod_Copy(PyObject* obj, PyObject* name, PyObject** method) {
@@ -520,7 +545,8 @@ namespace yapyjit {
 			pyfn,
 			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)mthd_obj)
 		});
-		emit_call(ctx, target, pyfn, args_mod);
+		emit_call(ctx, target, pyfn, args_mod, ((CallIns*)orig_call.get())->kwargs);
+		emit_disown(emit_ctx, pyfn);
 		auto end_label = emit_ctx->new_label();
 		emit_ctx->append_insn(MIR_JMP, { end_label });
 		emit_ctx->append_label(lab_deopt);

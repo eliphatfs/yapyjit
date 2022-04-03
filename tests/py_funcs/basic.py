@@ -191,3 +191,18 @@ def extended_args():
         _extended_args(1, 2, 3),
         _extended_args(1, 2, 3, 4)
     ]
+
+
+def _kw_call(a, b, c=1, d=2):
+    return a, b, c, d
+
+
+def kw_call():
+    return [
+        _kw_call(10, b=20),
+        _kw_call(10, 20, d=30),
+        _kw_call(a=10, b=20, c=30, d=40),
+        _kw_call(a=10, b=20, c=30),
+        _kw_call(a=10, b=20),
+        int('123', base=16)
+    ]

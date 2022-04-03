@@ -40,6 +40,8 @@ namespace yapyjit {
 				result.use[insn_b->func].push_back(insn_b);
 				for (auto arg : insn_b->args)
 					result.use[arg].push_back(insn_b);
+				for (const auto& kwarg : insn_b->kwargs)
+					result.use[kwarg.second].push_back(insn_b);
 				break;
 			}
 			case InsnTag::COMPARE: {

@@ -282,10 +282,14 @@ namespace yapyjit {
 	public:
 		std::unique_ptr<AST> func;
 		std::vector<std::unique_ptr<AST>> args;
-		// TODO: support kwargs
+		std::map<std::string, std::unique_ptr<AST>> kwargs;
 
 		Call(std::unique_ptr<AST>&& func_, std::vector<std::unique_ptr<AST>>& args_)
-			: func(std::move(func_)), args(std::move(args_)) {
+			: func(std::move(func_)), args(std::move(args_)), kwargs() {
+		}
+
+		Call(std::unique_ptr<AST>&& func_, std::vector<std::unique_ptr<AST>>& args_, std::map<std::string, std::unique_ptr<AST>>& kwargs_)
+			: func(std::move(func_)), args(std::move(args_)), kwargs(std::move(kwargs_)) {
 		}
 
 		virtual int emit_ir(Function& appender) {
@@ -294,10 +298,15 @@ namespace yapyjit {
 			for (auto& arg : args) {
 				argvec.push_back(arg->emit_ir(appender));
 			}
+			std::map<std::string, int> kwargmap;
+			for (auto& kwarg : kwargs) {
+				kwargmap[kwarg.first] = kwarg.second->emit_ir(appender);
+			}
 			auto call_ins = new CallIns(
 				result, func->emit_ir(appender)
 			);
 			call_ins->args.swap(argvec);
+			call_ins->kwargs.swap(kwargmap);
 			appender.new_insn(call_ins);
 			return result;
 		}

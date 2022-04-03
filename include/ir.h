@@ -343,14 +343,22 @@ namespace yapyjit {
 	public:
 		int dst, func;
 		std::vector<int> args;
+		std::map<std::string, int> kwargs;
 		CallIns(int dst_local_id, int func_local_id)
 			: dst(dst_local_id), func(func_local_id) {
 		}
 		virtual std::string pretty_print() {
 			std::string res = "call $" + std::to_string(dst) + " <- $" + std::to_string(func) + "(";
-			for (size_t i = 0; i < args.size(); i++) {
-				if (i != 0) res += ", ";
-				res += "$" + std::to_string(args[i]);
+			bool first = true;
+			for (auto arg : args) {
+				if (!first) res += ", ";
+				first = false;
+				res += "$" + std::to_string(arg);
+			}
+			for (const auto& kwarg : kwargs) {
+				if (!first) res += ", ";
+				first = false;
+				res += kwarg.first + "=$" + std::to_string(kwarg.second);
 			}
 			return res + ")";
 		}

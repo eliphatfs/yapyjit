@@ -221,11 +221,15 @@ namespace yapyjit {
 			}
 			TARGET(Call) {
 				std::vector<std::unique_ptr<AST>> args{};
+				std::map<std::string, std::unique_ptr<AST>> kwargs;
 				for (auto val : ast_man.attr("args")) {
 					args.push_back(ast_py2native(val));
 				}
+				for (auto kw : ast_man.attr("keywords")) {
+					kwargs[kw.attr("arg").to_cstr()] = ast_py2native(kw.attr("value"));
+				}
 				return std::make_unique<Call>(
-					ast_py2native(ast_man.attr("func")), args
+					ast_py2native(ast_man.attr("func")), args, kwargs
 				);
 			}
 			TARGET(Attribute) {
