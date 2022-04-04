@@ -53,6 +53,12 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
         self->wrapped = pyfunc;
 
         auto inspect_mod = yapyjit::ManagedPyo(PyImport_ImportModule("inspect"));
+
+        auto closure = inspect_mod.attr("getclosurevars").call(pyfunc);
+        if (PyObject_IsTrue(closure.attr("nonlocals").borrow())) {
+            throw std::invalid_argument(std::string("closure vars are not supported yet."));
+        }
+
         auto spec = inspect_mod.attr("getfullargspec").call(pyfunc);
         if (spec.attr("varargs") == Py_None && spec.attr("varkw") == Py_None) {
             for (auto arg : spec.attr("args")) {
