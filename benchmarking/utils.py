@@ -20,11 +20,13 @@ def jittify(globals_dict):
                     try:
                         setattr(obj, attr, yapyjit.jit(maybe_method))
                     except Exception as exc:
-                        print("Warning: JIT failed for {}.{}".format(obj.__name__, attr))
-                        print(exc)
+                        if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS"):
+                            print("Warning: JIT failed for {}.{}".format(obj.__name__, attr))
+                            print(exc)
         if isinstance(obj, types.FunctionType):
             try:
                 globals_dict[key] = yapyjit.jit(obj)
             except Exception as exc:
-                print("Warning: JIT failed for {}".format(obj))
-                print(exc)
+                if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS"):
+                    print("Warning: JIT failed for {}".format(obj))
+                    print(exc)
