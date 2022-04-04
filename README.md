@@ -13,12 +13,16 @@ The benchmarks are from [python/pyperformance](https://github.com/python/pyperfo
 Surprisingly, only with very basic transpiling from python code to machine code (that calls relevant CPython functions), as well as a bit of inline caching of dynamic calls in python, it already shows a significant amount of speed-up. `yapyjit` is even faster than PyPy on several tasks.
 
 On Intel Core i7-4700MQ (benchmarks are listed in alphabetical order, time is in milliseconds):
-| Benchmark | CPython38 | CPy38 + yapyjit | Speed-up (100% → x%) |
-| :---: | :---: | :---: | :---: |
-| float | 254 ± 16 | 181 ± 13 | 71.26% |
-| mdp (*)   | 5950 ± 410 | 5670 ± 290 | 95.29% |
-| nbody | 371 ± 69 | 243 ± 39 | 65.50% |
-| spectral_norm | 376 ± 61 | 196 ± 24 | 52.12% |
+|        Benchmark        | CPython38  | CPy38 + yapyjit | Speed-up (100% → x%) |
+| :---------------------: | :--------: | :-------------: | :------------------: |
+|          float          |  254 ± 16  |    181 ± 13     |        71.26%        |
+|         mdp (*)         | 5950 ± 410 |   5670 ± 290    |        95.29%        |
+|          nbody          |  371 ± 69  |    243 ± 39     |        65.50%        |
+|       scimark_fft       | 921 ± 100  |    575 ± 100    |        62.43%        |
+|   scimark_monte_carlo   |  278 ± 48  |    211 ± 43     |        75.90%        |
+|       scimark_sor       |  506 ± 60  |    444 ± 59     |        87.75%        |
+| scimark_sparse_mat_mult |   13 ± 2   |     6.8 ± 2     |        52.31%        |
+|      spectral_norm      |  376 ± 61  |    196 ± 24     |        52.12%        |
 
 (*): yapyjit cannot fully compile yet, various parts are still interpreted.
 

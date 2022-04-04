@@ -1,6 +1,7 @@
 import types
 import yapyjit
 import os
+import inspect
 
 
 def postfix():
@@ -20,13 +21,13 @@ def jittify(globals_dict):
                     try:
                         setattr(obj, attr, yapyjit.jit(maybe_method))
                     except Exception as exc:
-                        if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS"):
+                        if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS", ""):
                             print("Warning: JIT failed for {}.{}".format(obj.__name__, attr))
                             print(exc)
         if isinstance(obj, types.FunctionType):
             try:
                 globals_dict[key] = yapyjit.jit(obj)
             except Exception as exc:
-                if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS"):
+                if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS", ""):
                     print("Warning: JIT failed for {}".format(obj))
                     print(exc)
