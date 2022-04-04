@@ -78,11 +78,12 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
             PyObject* key, * value;
             Py_ssize_t pos = 0;
             auto kwonlydef = spec.attr("kwonlydefaults");
-            while (PyDict_Next(kwonlydef.borrow(), &pos, &key, &value)) {
-                assert(PyUnicode_CheckExact(key));
-                auto name = PyUnicode_AsUTF8(key);
-                (*self->defaults)[self->argidlookup->at(name)] = value;
-            }
+            if (PyDict_CheckExact(kwonlydef.borrow()))
+                while (PyDict_Next(kwonlydef.borrow(), &pos, &key, &value)) {
+                    assert(PyUnicode_CheckExact(key));
+                    auto name = PyUnicode_AsUTF8(key);
+                    (*self->defaults)[self->argidlookup->at(name)] = value;
+                }
         }
         else {
             throw std::invalid_argument(std::string("varargs and varkw funcs are not supported yet."));
@@ -100,7 +101,10 @@ static PyMemberDef wf_members[] = {
 
 static PyObject*
 wf_descr_get(PyObject* self, PyObject* obj, PyObject* type) {
-    if (obj == Py_None) return self;
+    if (obj == Py_None || obj == NULL) {
+        Py_INCREF(self);
+        return self;
+    }
     else return PyMethod_New(self, obj);
 }
 
