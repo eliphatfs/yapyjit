@@ -436,6 +436,13 @@ namespace yapyjit {
 				0
 			});
 		}
+
+		auto end_label = emit_jump_if(emit_ctx, target);
+		for (auto local_pair : ctx->locals) {
+			emit_disown(emit_ctx, ctx->emit_ctx->get_reg(local_pair.second));
+		}
+		emit_ctx->append_insn(MIR_RET, { (intptr_t)nullptr });
+		emit_ctx->append_label(end_label);
 	}
 
 	void CallIns::emit(Function* ctx) {
