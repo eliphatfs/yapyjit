@@ -399,6 +399,13 @@ namespace yapyjit {
 					body, orelse
 				);
 			}
+			TARGET(Global) {
+				auto names = std::vector<std::string>();
+				for (auto name : ast_man.attr("names")) {
+					names.push_back(name.to_cstr());
+				}
+				return std::make_unique<Global>(names);
+			}
 			TARGET(Break) {
 				return std::make_unique<Break>();
 			}

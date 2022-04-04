@@ -218,3 +218,19 @@ def kw_call():
         _kw_call(a=10, b=20),
         int('123', base=16)
     ]
+
+
+def _global_1(x):
+    global gva
+    gva = x
+    return gva
+
+
+def _global_2(discard):
+    return gva
+
+
+def global_var():
+    v = _global_1(15)
+    _global_1(10)
+    return v, _global_2(None)

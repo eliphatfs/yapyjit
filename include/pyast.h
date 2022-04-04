@@ -42,6 +42,7 @@ namespace yapyjit {
 		WHILE,
 		IF,
 		RAISE,
+		GLOBAL,
 		BREAK,
 		CONTINUE,
 		FUNCDEF,
@@ -603,6 +604,18 @@ namespace yapyjit {
 		}
 	};
 
+	class Global : public ASTWithTag<ASTTag::GLOBAL> {
+	public:
+		std::vector<std::string> names;
+		Global(const std::vector<std::string>& names_) : names(names_) {}
+		virtual int emit_ir(Function& appender) {
+			for (const auto& name : names) {
+				appender.globals.insert(name);
+			}
+			return -1;
+		}
+	};
+
 	class FuncDef : public ASTWithTag<ASTTag::FUNCDEF> {
 	public:
 		ManagedPyo global_ns;
@@ -652,18 +665,22 @@ namespace yapyjit {
 		{
 		case ASTTag::NAME: {
 			const auto& id = ((Name*)dst)->identifier;
-			if (appender.globals.count(id)) {
+			// TODO: Check validity by analysis after IR is gen.
+			/*if (appender.globals.count(id)) {
 				throw std::invalid_argument(
 					std::string(
 						__FUNCTION__
 						" trying to assign to global variable (or possibly unbound local) `"
 					) + id + "`"
 				);
-			}
+			}*/
 			const auto vid = appender.locals.insert(
 				{ id, (int)appender.locals.size() + 1 }
 			).first;  // second is success
 			appender.new_insn(new MoveIns(vid->second, src));
+			if (appender.globals.count(id)) {
+				appender.new_insn(new StoreGlobalIns(vid->second, id));
+			}
 			break;
 		}
 		case ASTTag::ATTR: {

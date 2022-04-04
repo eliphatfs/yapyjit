@@ -371,6 +371,20 @@ namespace yapyjit {
 		emit_newown(emit_ctx, target);
 	}
 
+	void StoreGlobalIns::emit(Function* func) {
+		auto glob = func->globals_ns.borrow();  // PyEval_GetGlobals();
+		if (!glob) throw std::logic_error(__FUNCTION__" cannot get globals.");
+		if (!PyDict_CheckExact(glob)) throw std::logic_error(__FUNCTION__" globals() is not a dict.");
+		auto hash_cache = PyUnicode_FromString(name.c_str());
+		func->emit_keeprefs.push_back(ManagedPyo(hash_cache));
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(intptr_t)PyDict_SetItem,
+			(intptr_t)glob,
+			(intptr_t)hash_cache, func->emit_ctx->get_reg(src)
+		});
+	}
+
 	PyObject* _call_resolver(PyObject* callee, PyObject* args, PyObject* kwargs, ternaryfunc* resolved) {
 		// TODO: don't forget to check recursion limit when exception is supported
 		auto tpcall = Py_TYPE(callee)->tp_call;

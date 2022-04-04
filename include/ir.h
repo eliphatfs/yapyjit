@@ -46,6 +46,7 @@ namespace yapyjit {
 		RAISE,
 		RETURN,
 		STOREATTR,
+		STOREGLOBAL,
 		STOREITEM,
 		UNARYOP,
 		// C_ insns will not exist before combining insns/peephole opt
@@ -335,6 +336,19 @@ namespace yapyjit {
 		}
 		virtual std::string pretty_print() {
 			return "ldg $" + std::to_string(dst) + " <- " + name;
+		}
+		virtual void emit(Function* func);
+	};
+
+	class StoreGlobalIns : public InsnWithTag<InsnTag::STOREGLOBAL> {
+	public:
+		int src;
+		std::string name;
+		StoreGlobalIns(int src_local_id, const std::string& name_)
+			: src(src_local_id), name(name_) {
+		}
+		virtual std::string pretty_print() {
+			return "stg " + name + " <- $" + std::to_string(src);
 		}
 		virtual void emit(Function* func);
 	};

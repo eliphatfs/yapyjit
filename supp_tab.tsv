@@ -13,7 +13,7 @@ Try			DictComp	1
 Assert	1		GeneratorExp	P
 Import			Yield	
 ImportFrom			Compare	1
-Global			Call	1
+Global	1		Call	1
 Nonlocal			FormattedValue	1
 Expr	1		JoinedStr	1
 Pass 	1		Constant	1
