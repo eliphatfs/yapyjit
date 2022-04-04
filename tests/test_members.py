@@ -19,6 +19,11 @@ class A:
     def clsmthd(cls):
         return cls.__name__
 
+    @staticmethod
+    @yapyjit.jit
+    def staticmthd():
+        return "static"
+
 
 @yapyjit.jit
 def attribute_tester(x):
@@ -48,6 +53,9 @@ class TestMembers(unittest.TestCase):
 
     def test_class_method(self):
         self.assertEqual(A.clsmthd(), A.__name__)
+
+    def test_static_method(self):
+        self.assertEqual(A.staticmthd(), "static")
 
 
 if __name__ == "__main__":

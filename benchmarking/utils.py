@@ -17,6 +17,14 @@ def jittify(globals_dict):
             for attr in dir(obj):
                 maybe_method = getattr(obj, attr)
                 if isinstance(maybe_method, types.FunctionType):
-                    setattr(obj, attr, yapyjit.jit(maybe_method))
+                    try:
+                        setattr(obj, attr, yapyjit.jit(maybe_method))
+                    except Exception as exc:
+                        print("Warning: JIT failed for {}.{}".format(obj.__name__, attr))
+                        print(exc)
         if isinstance(obj, types.FunctionType):
-            globals_dict[key] = yapyjit.jit(obj)
+            try:
+                globals_dict[key] = yapyjit.jit(obj)
+            except Exception as exc:
+                print("Warning: JIT failed for {}".format(obj))
+                print(exc)
