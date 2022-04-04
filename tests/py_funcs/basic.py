@@ -173,6 +173,18 @@ def comprehension_3():
     return a, b
 
 
+def comprehension_4():
+    a = '12345'
+    b = dict([(a, a) for a in a])
+    return a, b
+
+
+def comprehension_5():
+    a = '12345'
+    b = {y: y for y in a}
+    return a, b
+
+
 def genexpr_eager():
     return tuple(x for x in range(10) if x % 2 == 0)
 

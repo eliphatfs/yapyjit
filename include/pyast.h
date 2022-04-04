@@ -284,12 +284,21 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> args;
 		std::map<std::string, std::unique_ptr<AST>> kwargs;
 
+		Call(std::unique_ptr<AST>&& func_)
+			: func(std::move(func_)), args(), kwargs() {
+		}
+
 		Call(std::unique_ptr<AST>&& func_, std::vector<std::unique_ptr<AST>>& args_)
 			: func(std::move(func_)), args(std::move(args_)), kwargs() {
 		}
 
 		Call(std::unique_ptr<AST>&& func_, std::vector<std::unique_ptr<AST>>& args_, std::map<std::string, std::unique_ptr<AST>>& kwargs_)
 			: func(std::move(func_)), args(std::move(args_)), kwargs(std::move(kwargs_)) {
+		}
+
+		Call(std::unique_ptr<AST>&& func_, std::unique_ptr<AST>&& arg0)
+			: func(std::move(func_)), args(), kwargs() {
+			args.push_back(std::move(arg0));
 		}
 
 		virtual int emit_ir(Function& appender) {

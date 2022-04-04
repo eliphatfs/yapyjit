@@ -56,12 +56,11 @@ namespace yapyjit {
 	std::unique_ptr<AST> lower_comprehension(ManagedPyo ast_man, ManagedPyo init_callable, ManagedPyo add_callable) {
 		auto result = std::make_unique<ValueBlock>();
 		auto init_fn = new Constant(init_callable);
-		std::vector<std::unique_ptr<AST>> args_init;
 		auto comp_name = std::string("_yapyjit_comp_r_") + std::to_string((intptr_t)ast_man.borrow());
 		std::vector<std::unique_ptr<AST>> assned;
 		assned.push_back(std::unique_ptr<AST>(new Name(comp_name)));
 		result->new_stmt(new Assign(
-			std::unique_ptr<AST>(new Call(std::unique_ptr<AST>(init_fn), args_init)),
+			std::unique_ptr<AST>(new Call(std::unique_ptr<AST>(init_fn))),
 			assned
 		));
 		std::vector<ManagedPyo> names;
@@ -207,6 +206,19 @@ namespace yapyjit {
 				ManagedPyo add_callable = init_callable.attr("add");
 				return lower_comprehension(ast_man, init_callable, add_callable);
 			}
+			TARGET(DictComp) {
+				auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
+				auto fill = ManagedPyo(PyList_New(2));
+				PyList_SetItem(fill.borrow(), 0, ast_man.attr("key").borrow());
+				PyList_SetItem(fill.borrow(), 1, ast_man.attr("value").borrow());
+				auto fill_elt = ast_mod.attr("Tuple").call(fill.borrow(), ast_mod.attr("Load").call().borrow());
+				auto ast_conv = ast_mod.attr("ListComp").call(fill_elt.borrow(), ast_man.attr("generators").borrow());
+				auto built = ast_py2native(ast_conv);
+				return std::make_unique<Call>(
+					std::unique_ptr<AST>(new Constant(ManagedPyo((PyObject*)&PyDict_Type, true))),
+					std::move(built)
+				);
+			}
 			TARGET(Compare) {
 				std::vector<OpCmp> ops{};
 				for (auto op : ast_man.attr("ops")) {
@@ -261,11 +273,9 @@ namespace yapyjit {
 				case 115:
 					cvt = _helper_get_builtin_as_ast_constant("str"); break;
 				}
-				std::vector<std::unique_ptr<AST>> cvtargs {};
 				if (cvt) {
-					cvtargs.push_back(std::move(val));
 					val = std::make_unique<Call>(
-						std::move(cvt), cvtargs
+						std::move(cvt), std::move(val)
 					);
 				}
 				std::vector<std::unique_ptr<AST>> fmtargs {};
@@ -286,10 +296,8 @@ namespace yapyjit {
 					args.push_back(ast_py2native(val));
 				}
 				std::unique_ptr<AST> argtuple = std::make_unique<Tuple>(args);
-				std::vector<std::unique_ptr<AST>> callargs {};
-				callargs.push_back(std::move(argtuple));
 				return std::make_unique<Call>(
-					std::move(joiner), callargs
+					std::move(joiner), std::move(argtuple)
 				);
 			}
 			TARGET(Constant) {
