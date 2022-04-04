@@ -25,12 +25,12 @@ for mi in pkgutil.walk_packages(py_funcs.__path__):
     module = importlib.import_module(full_name)
     tc_vs = {}
     members = {}
-    for name, obj in module.__dict__.items():
+    for name, obj in dict(module.__dict__).items():
         if not isinstance(obj, types.FunctionType):
             continue
         if len(inspect.getfullargspec(obj).args) == 0:
             tc_vs[name] = obj()
-    for name, obj in module.__dict__.items():
+    for name, obj in dict(module.__dict__).items():
         if not isinstance(obj, types.FunctionType):
             continue
         module.__dict__[name] = yapyjit.jit(obj)
