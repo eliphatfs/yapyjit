@@ -326,6 +326,25 @@ namespace yapyjit {
 					ast_py2native(val)
 				);
 			}
+			TARGET(Try) {
+				auto nast = new Try();
+				for (auto stmt : ast_man.attr("body"))
+					nast->body.push_back(ast_py2native(stmt));
+				for (auto stmt : ast_man.attr("orelse"))
+					nast->orelse.push_back(ast_py2native(stmt));
+				for (auto stmt : ast_man.attr("finalbody"))
+					nast->finalbody.push_back(ast_py2native(stmt));
+				for (auto handler : ast_man.attr("handlers")) {
+					nast->handlers.push_back(ExceptHandler());
+					for (auto stmt : handler.attr("body"))
+						nast->handlers.rbegin()->body.push_back(ast_py2native(stmt));
+					nast->handlers.rbegin()->name = handler.attr("name") == Py_None ? "" : handler.attr("name").to_cstr();
+					if (!(handler.attr("type") == Py_None)) {
+						nast->handlers.rbegin()->type = ast_py2native(handler.attr("type"));
+					}
+				}
+				return std::unique_ptr<Try>(nast);
+			}
 			TARGET(Return) {
 				auto val = ast_man.attr("value");
 				if (val == Py_None) {

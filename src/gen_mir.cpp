@@ -81,6 +81,7 @@ namespace yapyjit {
 			emit_3pyo_call(emit_ctx, (int64_t)PyNumber_Power, target, a, b, (int64_t)Py_None); break;
 			break;
 		}
+		emit_error_check(func, target);
 	}
 
 	PyObject* pyo_not_obj(PyObject* obj) {
@@ -139,6 +140,7 @@ namespace yapyjit {
 			GEN_SIN(Op1ary::UAdd, PyNumber_Positive);
 			GEN_SIN(Op1ary::USub, PyNumber_Negative);
 		}
+		emit_error_check(func, target);
 	}
 
 	void CompareIns::emit(Function* func) {
@@ -158,6 +160,7 @@ namespace yapyjit {
 			GEN_BIN(OpCmp::In, pyo_in_obj);
 			GEN_BIN(OpCmp::NotIn, pyo_not_in_obj);
 		}
+		emit_error_check(func, target);
 	}
 
 	void JumpIns::emit(Function* func) {
@@ -210,6 +213,7 @@ namespace yapyjit {
 			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_GetAttr, target, obj, (int64_t)attr_obj.borrow()
 		});
+		emit_error_check(func, target);
 	}
 
 	void LoadItemIns::emit(Function* func) {
@@ -221,6 +225,7 @@ namespace yapyjit {
 			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_GetItem, target, source, sub
 		});
+		emit_error_check(func, target);
 	}
 
 	void StoreItemIns::emit(Function* func) {
@@ -250,6 +255,7 @@ namespace yapyjit {
 			(int64_t)PyIter_Next, target, func->emit_ctx->get_reg(iter)
 		});
 		func->emit_ctx->append_insn(MIR_BF, { ensure_label(func, iterFailTo), target });
+		emit_error_check(func, target);
 	}
 
 	void BuildIns::emit(Function* func) {
@@ -370,6 +376,7 @@ namespace yapyjit {
 			});
 			emit_ctx->append_label(skip_blt);
 		}
+		emit_error_check(func, target);
 		emit_newown(emit_ctx, target);
 	}
 
@@ -573,13 +580,58 @@ namespace yapyjit {
 		emit_ctx->append_label(end_label);
 	}
 
+	void CheckErrorTypeIns::emit(Function* ctx) {
+		auto emit_ctx = ctx->emit_ctx.get();
+		auto target = emit_ctx->get_reg(dst);
+		auto tyck = emit_ctx->new_temp_reg(MIR_T_I64);
+		auto mem = (PyObject**)ctx->allocate_fill(sizeof(PyObject*) * 3);
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIRType<int>::t, { MIR_T_P }),
+			(int64_t)PyErr_ExceptionMatches, tyck, emit_ctx->get_reg(ty)
+		});
+		emit_ctx->append_insn(MIR_BF, { ensure_label(ctx, failjump), tyck });
+		// printf("%p %p\n", mem, mem + 1);
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyErr_Fetch,
+			(intptr_t)(mem + 1),
+			(intptr_t)mem,
+			(intptr_t)(mem + 2)
+		});
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyErr_NormalizeException,
+			(intptr_t)(mem + 1),
+			(intptr_t)mem,
+			(intptr_t)(mem + 2)
+		});
+		emit_ctx->append_insn(MIR_MOV, {
+			target, MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem + 1))
+		});
+		emit_disown(emit_ctx, target);
+		emit_ctx->append_insn(MIR_MOV, {
+			target, MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem + 2))
+		});
+		emit_disown(emit_ctx, target);
+		emit_ctx->append_insn(MIR_MOV, {
+			target, MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem))
+		});
+	}
+
+	void ErrorPropIns::emit(Function* func) {
+		func->emit_ctx->append_insn(MIR_JMP, { func->error_label });
+	}
+
 	void SetErrorLabelIns::emit(Function* func) {
-		func->error_label = ensure_label(func, target);
+		if (target)
+			func->error_label = ensure_label(func, target);
+		else
+			func->error_label = func->epilogue_label;
 	}
 
 	void EpilogueIns::emit(Function* func) {
 		func->emit_ctx->append_label(func->epilogue_label);
-		for (auto local_pair : func->locals) {
+		for (const auto& local_pair : func->locals) {
 			emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(local_pair.second));
 		}
 		func->emit_ctx->append_insn(MIR_RET, { func->return_reg });

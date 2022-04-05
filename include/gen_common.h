@@ -92,6 +92,15 @@ namespace yapyjit {
 		return func->emit_label_map.insert({ label, func->emit_ctx->new_label() }).first->second;
 	}
 
+	inline void emit_error_check_int(Function* ctx, MIROp target) {
+		auto emit_ctx = ctx->emit_ctx.get();
+		auto end_label = emit_ctx->new_label();
+		emit_ctx->append_insn(MIR_BNE, { end_label, -1 });
+		emit_ctx->append_insn(MIR_MOV, { ctx->return_reg, (intptr_t)nullptr });
+		emit_ctx->append_insn(MIR_JMP, { ctx->error_label });
+		emit_ctx->append_label(end_label);
+	}
+
 	inline void emit_error_check(Function* ctx, MIROp target) {
 		auto emit_ctx = ctx->emit_ctx.get();
 		auto end_label = emit_jump_if(emit_ctx, target);

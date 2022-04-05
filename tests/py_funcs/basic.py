@@ -234,3 +234,32 @@ def global_var():
     v = _global_1(15)
     _global_1(10)
     return v, _global_2(None)
+
+
+def _try_catch(f):
+    try:
+        f(0)
+    except ZeroDivisionError as exc:
+        print(1, exc)
+        return 1, exc
+    except Exception as exc:
+        print(2, exc)
+        return 2, exc
+    else:
+        return 3, None
+
+
+def _raise_1(discard):
+    return 1 / 0
+
+
+def _raise_2(discard):
+    raise ValueError("foo")
+
+
+def test_error_init():
+    return ValueError("foo")
+
+
+def try_catch():
+    return _try_catch(_raise_1), _try_catch(_raise_2), _try_catch(_relu)

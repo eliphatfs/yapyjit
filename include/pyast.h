@@ -42,6 +42,7 @@ namespace yapyjit {
 		WHILE,
 		IF,
 		RAISE,
+		TRY,
 		GLOBAL,
 		BREAK,
 		CONTINUE,
@@ -63,6 +64,23 @@ namespace yapyjit {
 
 	inline void assn_ir(Function& appender, AST* dst, int src);
 	inline void del_ir(Function& appender, AST* dst);
+
+	class LoopBlock : public PBlock {
+	public:
+		LabelIns* cont_pt, * break_pt;
+		virtual void emit_exit(Function& appender) { }
+	};
+
+	class ErrorHandleBlock : public PBlock {
+	public:
+		LabelIns* err_start;
+		std::vector<AST*> finalbody;
+		virtual void emit_exit(Function& appender) {
+			for (auto astptr : finalbody) {
+				astptr->emit_ir(appender);
+			}
+		}
+	};
 
 	template<int T_tag>
 	class ASTWithTag: public AST {
@@ -394,6 +412,9 @@ namespace yapyjit {
 			: expr(std::move(expr_)) {}
 		virtual int emit_ir(Function& appender) {
 			int ret = expr->emit_ir(appender);
+			for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
+				(*it)->emit_exit(appender);
+			}
 			appender.new_insn(new ReturnIns(ret));
 			return -1;
 		}
@@ -457,14 +478,15 @@ namespace yapyjit {
 			: target(std::move(target_)), iter(std::move(iter_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 
 		virtual int emit_ir(Function& appender) {
-			auto saved_ctx = appender.ctx;
 			auto label_st = std::make_unique<LabelIns>();
 			auto label_body = std::make_unique<LabelIns>();
 			auto label_orelse = std::make_unique<LabelIns>();
 			auto label_ed = std::make_unique<LabelIns>();
 
-			appender.ctx.cont_pt = label_st.get();
-			appender.ctx.break_pt = label_ed.get();
+			auto loopblock = new LoopBlock();
+			loopblock->cont_pt = label_st.get();
+			loopblock->break_pt = label_ed.get();
+			appender.pblocks.push_back(std::unique_ptr<PBlock>(loopblock));
 
 			// for target in iter body orelse end
 			// get_iter; start; fornx orelse; body; j start; orelse; end;
@@ -490,12 +512,12 @@ namespace yapyjit {
 
 			appender.add_insn(std::move(label_body));
 			for (auto& stmt : body) stmt->emit_ir(appender);
-			appender.new_insn(new JumpIns(appender.ctx.cont_pt));
+			appender.new_insn(new JumpIns(loopblock->cont_pt));
 			appender.add_insn(std::move(label_orelse));
 			for (auto& stmt : orelse) stmt->emit_ir(appender);
 			appender.add_insn(std::move(label_ed));
 
-			appender.ctx = saved_ctx;
+			appender.pblocks.pop_back();
 			return -1;
 		}
 	};
@@ -508,14 +530,15 @@ namespace yapyjit {
 		While(std::unique_ptr<AST>&& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 		virtual int emit_ir(Function& appender) {
-			auto saved_ctx = appender.ctx;
 			auto label_st = std::make_unique<LabelIns>();
 			auto label_body = std::make_unique<LabelIns>();
 			auto label_orelse = std::make_unique<LabelIns>();
 			auto label_ed = std::make_unique<LabelIns>();
 
-			appender.ctx.cont_pt = label_st.get();
-			appender.ctx.break_pt = label_ed.get();
+			auto loopblock = new LoopBlock();
+			loopblock->cont_pt = label_st.get();
+			loopblock->break_pt = label_ed.get();
+			appender.pblocks.push_back(std::unique_ptr<PBlock>(loopblock));
 
 			// while test body orelse end
 			// start; test; jt body; j orelse; body; j start; orelse; end;
@@ -525,26 +548,44 @@ namespace yapyjit {
 			appender.new_insn(new JumpIns(label_orelse.get()));
 			appender.add_insn(std::move(label_body));
 			for (auto& stmt : body) stmt->emit_ir(appender);
-			appender.new_insn(new JumpIns(appender.ctx.cont_pt));
+			appender.new_insn(new JumpIns(loopblock->cont_pt));
 			appender.add_insn(std::move(label_orelse));
 			for (auto& stmt : orelse) stmt->emit_ir(appender);
 			appender.add_insn(std::move(label_ed));
 
-			appender.ctx = saved_ctx;
+			appender.pblocks.pop_back();
 			return -1;
 		}
 	};
 
 	class Break : public ASTWithTag<ASTTag::BREAK> {
 		virtual int emit_ir(Function& appender) {
-			appender.new_insn(new JumpIns(appender.ctx.break_pt));
+			for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
+				auto loop_blk = dynamic_cast<LoopBlock*>(it->get());
+				if (loop_blk) {
+					appender.new_insn(new JumpIns(loop_blk->break_pt));
+					break;
+				}
+				else {
+					(*it)->emit_exit(appender);
+				}
+			}
 			return -1;
 		}
 	};
 
 	class Continue : public ASTWithTag<ASTTag::CONTINUE> {
 		virtual int emit_ir(Function& appender) {
-			appender.new_insn(new JumpIns(appender.ctx.cont_pt));
+			for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
+				auto loop_blk = dynamic_cast<LoopBlock*>(it->get());
+				if (loop_blk) {
+					appender.new_insn(new JumpIns(loop_blk->cont_pt));
+					break;
+				}
+				else {
+					(*it)->emit_exit(appender);
+				}
+			}
 			return -1;
 		}
 	};
@@ -584,6 +625,72 @@ namespace yapyjit {
 		virtual int emit_ir(Function& appender) {
 			auto exc_v = exc->emit_ir(appender);
 			appender.new_insn(new RaiseIns(exc_v));
+			return -1;
+		}
+	};
+	
+	struct ExceptHandler {
+		std::unique_ptr<AST> type;
+		std::string name;
+		std::vector<std::unique_ptr<AST>> body;
+	};
+
+	class Try : public ASTWithTag<ASTTag::TRY> {
+	public:
+		std::vector<std::unique_ptr<AST>> body, orelse, finalbody;
+		std::vector<ExceptHandler> handlers;
+		virtual int emit_ir(Function& appender) {
+			LabelIns* old_label_err = nullptr;
+			for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
+				auto old_err_blk = dynamic_cast<ErrorHandleBlock*>(it->get());
+				if (old_err_blk) {
+					old_label_err = old_err_blk->err_start;
+					break;
+				}
+			}
+
+			auto err_blk = new ErrorHandleBlock();
+			auto label_err = std::make_unique<LabelIns>();
+			auto label_blk_next = std::make_unique<LabelIns>();
+			err_blk->err_start = label_err.get();
+			for (auto& stmt : finalbody)
+				err_blk->finalbody.push_back(stmt.get());
+
+			appender.pblocks.push_back(std::unique_ptr<ErrorHandleBlock>(err_blk));
+			appender.new_insn(new SetErrorLabelIns(label_err.get()));
+			for (auto& stmt : body)
+				stmt->emit_ir(appender);
+			appender.pblocks.pop_back();
+			appender.new_insn(new SetErrorLabelIns(old_label_err));
+
+			for (auto& stmt : orelse)
+				stmt->emit_ir(appender);
+			appender.new_insn(new JumpIns(label_blk_next.get()));
+			appender.add_insn(std::move(label_err));
+			// Start error handlers
+			for (auto& handler : handlers) {
+				auto end = std::make_unique<LabelIns>();
+				if (handler.type) {
+					auto ty = handler.type->emit_ir(appender);
+					auto bounderr = new_temp_var(appender);
+					appender.new_insn(new CheckErrorTypeIns(end.get(), bounderr, ty));
+					if (handler.name.length() > 0) {
+						auto variable = std::make_unique<Name>(handler.name);
+						assn_ir(appender, variable.get(), bounderr);
+					}
+				}
+				for (auto& stmt : handler.body) {
+					stmt->emit_ir(appender);
+				}
+				appender.new_insn(new JumpIns(label_blk_next.get()));
+				appender.add_insn(std::move(end));
+			}
+			for (auto& stmt : finalbody)
+				stmt->emit_ir(appender);
+			appender.new_insn(new ErrorPropIns());
+			appender.add_insn(std::move(label_blk_next));
+			for (auto& stmt : finalbody)
+				stmt->emit_ir(appender);
 			return -1;
 		}
 	};

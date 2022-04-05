@@ -31,10 +31,12 @@ namespace yapyjit {
 		BINOP = 1,
 		BUILD,
 		CALL,
+		CHECKERRORTYPE,
 		COMPARE,
 		CONSTANT,
 		DELATTR,
 		DELITEM,
+		ERRORPROP,
 		ITERNEXT,
 		JUMP,
 		JUMPTRUTHY,
@@ -402,16 +404,39 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class CheckErrorTypeIns : public InsnWithTag<InsnTag::CHECKERRORTYPE> {
+	public:
+		LabelIns* failjump;
+		int dst, ty;
+		CheckErrorTypeIns(LabelIns* fail, int dst_local_id, int ty_local_id) :
+			failjump(fail), dst(dst_local_id), ty(ty_local_id) { }
+		virtual std::string pretty_print() {
+			std::string res = "chkerr $" + std::to_string(ty) + " ?> $" + std::to_string(dst) + "; " + failjump->pretty_print();
+			return res;
+		}
+		virtual void emit(Function* func);
+	};
+
+	class ErrorPropIns : public InsnWithTag<InsnTag::ERRORPROP> {
+	public:
+		virtual std::string pretty_print() {
+			return "errorprop";
+		}
+		virtual void emit(Function* func);
+	};
+
 	class SetErrorLabelIns : public InsnWithTag<InsnTag::V_SETERRLAB> {
+	public:
 		LabelIns* target;
 		SetErrorLabelIns(LabelIns* target_) : target(target_) {}
 		virtual std::string pretty_print() {
-			return "v.seterrlab " + target->pretty_print();
+			return "v.seterrlab " + (!target ? "[default]" : target->pretty_print());
 		}
 		virtual void emit(Function* func);
 	};
 
 	class EpilogueIns : public InsnWithTag<InsnTag::V_EPILOG> {
+	public:
 		virtual std::string pretty_print() {
 			return "epilogue";
 		}
@@ -424,7 +449,10 @@ namespace yapyjit {
 		std::vector<std::vector<Instruction*>> def, use;
 		DefUseResult(size_t var_cnt): def(var_cnt), use(var_cnt) { }
 	};
-
+	class PBlock {
+	public:
+		virtual void emit_exit(Function& appender) = 0;
+	};
 	class Function {
 	public:
 		ManagedPyo globals_ns;
@@ -433,9 +461,10 @@ namespace yapyjit {
 		std::map<std::string, int> locals;
 		std::set<std::string> globals;
 		int nargs;
-		struct {
-			LabelIns* cont_pt, * break_pt;
-		} ctx;
+		/*struct {
+			LabelIns* cont_pt, * break_pt, *error_start;
+		} ctx;*/
+		std::vector<std::unique_ptr<PBlock>> pblocks;
 		// TODO: emit context is messy
 		std::unique_ptr<MIRFunction> emit_ctx;
 		std::vector<ManagedPyo> emit_keeprefs;
@@ -445,7 +474,7 @@ namespace yapyjit {
 		MIRRegOp return_reg;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
 		Function(ManagedPyo globals_ns_, std::string name_, int nargs_) :
-			globals_ns(globals_ns_), name(name_), ctx(), nargs(nargs_),
+			globals_ns(globals_ns_), name(name_), nargs(nargs_),
 			return_reg(0), epilogue_label(nullptr), error_label(nullptr) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.

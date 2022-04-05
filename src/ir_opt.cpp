@@ -50,6 +50,12 @@ namespace yapyjit {
 					result.use[kwarg.second].push_back(insn_b);
 				break;
 			}
+			case InsnTag::CHECKERRORTYPE: {
+				auto insn_b = (CheckErrorTypeIns*)insn.get();
+				result.def[insn_b->dst].push_back(insn_b);
+				result.use[insn_b->ty].push_back(insn_b);
+				break;
+			}
 			case InsnTag::COMPARE: {
 				auto insn_b = (CompareIns*)insn.get();
 				result.def[insn_b->dst].push_back(insn_b);
