@@ -640,6 +640,7 @@ namespace yapyjit {
 				std::unique_ptr<AST>(new Constant(ManagedPyo(Py_None, true)))
 			);
 			ret_none_default.emit_ir(*appender);
+			appender->new_insn(new EpilogueIns());
 
 			Function prelude = Function(global_ns, name, 0);
 			for (const auto& glob : appender->globals) {

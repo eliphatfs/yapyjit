@@ -10,13 +10,16 @@ namespace yapyjit {
 	}
 
 	void ReturnIns::emit(Function * func) {
-		for (auto local_pair : func->locals) {
-			if (src != local_pair.second) {
-				emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(local_pair.second));
-			}
-		}
-		
-		func->emit_ctx->append_insn(MIR_RET, { func->emit_ctx->get_reg(src) });
+		// ownership transferring data move. no need to update refcnt.
+		func->emit_ctx->append_insn(MIR_MOV, {
+			func->return_reg,
+			func->emit_ctx->get_reg(src)
+		});
+		func->emit_ctx->append_insn(MIR_MOV, {
+			func->emit_ctx->get_reg(src),
+			(intptr_t)nullptr
+		});
+		func->emit_ctx->append_insn(MIR_JMP, { func->epilogue_label });
 	}
 
 	void RaiseIns::emit(Function* func) {
@@ -29,11 +32,10 @@ namespace yapyjit {
 			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
 			(int64_t)PyErr_SetObject, cls, func->emit_ctx->get_reg(exc)
 		});
-		for (auto local_pair : func->locals) {
-			emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(local_pair.second));
-		}
 		emit_disown(func->emit_ctx.get(), cls);
-		func->emit_ctx->append_insn(MIR_RET, { (intptr_t)nullptr });
+
+		func->emit_ctx->append_insn(MIR_MOV, { func->return_reg, (intptr_t)nullptr });
+		func->emit_ctx->append_insn(MIR_JMP, { func->error_label });
 	}
 
 	void MoveIns::emit(Function* func) {
@@ -451,12 +453,7 @@ namespace yapyjit {
 			});
 		}
 
-		auto end_label = emit_jump_if(emit_ctx, target);
-		for (auto local_pair : ctx->locals) {
-			emit_disown(emit_ctx, ctx->emit_ctx->get_reg(local_pair.second));
-		}
-		emit_ctx->append_insn(MIR_RET, { (intptr_t)nullptr });
-		emit_ctx->append_label(end_label);
+		emit_error_check(ctx, target);
 	}
 
 	void CallIns::emit(Function* ctx) {
@@ -576,9 +573,24 @@ namespace yapyjit {
 		emit_ctx->append_label(end_label);
 	}
 
+	void SetErrorLabelIns::emit(Function* func) {
+		func->error_label = ensure_label(func, target);
+	}
+
+	void EpilogueIns::emit(Function* func) {
+		func->emit_ctx->append_label(func->epilogue_label);
+		for (auto local_pair : func->locals) {
+			emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(local_pair.second));
+		}
+		func->emit_ctx->append_insn(MIR_RET, { func->return_reg });
+	}
+
 	MIR_item_t generate_mir(Function& func) {
 		auto mod = mir_ctx.new_module(func.name);
 		func.emit_ctx = mod->new_func(func.name, MIR_T_P, { MIR_T_P, MIR_T_P });
+		func.return_reg = func.emit_ctx->new_temp_reg(MIR_T_I64);
+		func.epilogue_label = func.emit_ctx->new_label();
+		func.error_label = func.epilogue_label;
 
 		for (auto& loc : func.locals) {
 			func.emit_ctx->new_reg(MIR_T_I64, loc.second);

@@ -51,7 +51,10 @@ namespace yapyjit {
 		UNARYOP,
 		// C_ insns will not exist before combining insns/peephole opt
 		// We do not need to include these in analysis
-		C_CALLMTHD
+		C_CALLMTHD,
+		// V_ virtual/special insns
+		V_SETERRLAB,
+		V_EPILOG
 	)
 
 	BETTER_ENUM(
@@ -399,6 +402,23 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class SetErrorLabelIns : public InsnWithTag<InsnTag::V_SETERRLAB> {
+		LabelIns* target;
+		SetErrorLabelIns(LabelIns* target_) : target(target_) {}
+		virtual std::string pretty_print() {
+			return "v.seterrlab " + target->pretty_print();
+		}
+		virtual void emit(Function* func);
+	};
+
+	class EpilogueIns : public InsnWithTag<InsnTag::V_EPILOG> {
+		virtual std::string pretty_print() {
+			return "epilogue";
+		}
+		virtual void emit(Function* func);
+		virtual bool control_leaves() { return true; }
+	};
+
 	class DefUseResult {
 	public:
 		std::vector<std::vector<Instruction*>> def, use;
@@ -420,8 +440,13 @@ namespace yapyjit {
 		std::unique_ptr<MIRFunction> emit_ctx;
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
+		MIRLabelOp error_label;
+		MIRLabelOp epilogue_label;
+		MIRRegOp return_reg;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
-		Function(ManagedPyo globals_ns_, std::string name_, int nargs_) : globals_ns(globals_ns_), name(name_), ctx(), nargs(nargs_) {}
+		Function(ManagedPyo globals_ns_, std::string name_, int nargs_) :
+			globals_ns(globals_ns_), name(name_), ctx(), nargs(nargs_),
+			return_reg(0), epilogue_label(nullptr), error_label(nullptr) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.
 		void new_insn(Instruction * insn) {

@@ -1,17 +1,23 @@
 #include <ir.h>
+
 namespace yapyjit {
 	void Function::dce() {
 		std::vector<std::unique_ptr<Instruction>> new_instructions;
 		bool dc_region = false;
 		for (auto& insn : instructions) {
+			auto tag = insn->tag();
 			if (insn->control_leaves()) {
 				if (!dc_region) new_instructions.push_back(std::move(insn));
 				dc_region = true;
 			}
-			else if (insn->tag() == +InsnTag::LABEL) {
+			else if (tag == +InsnTag::LABEL) {
 				dc_region = false;
 			}
-			if (!dc_region) new_instructions.push_back(std::move(insn));
+			if (!dc_region
+				|| tag == +InsnTag::V_SETERRLAB
+				|| tag == +InsnTag::V_EPILOG) {
+				new_instructions.push_back(std::move(insn));
+			}
 		}
 		instructions.swap(new_instructions);
 	}
