@@ -1,4 +1,5 @@
 import random
+import sys
 
 
 def trivial():
@@ -270,3 +271,52 @@ def _raise_2(discard):
 
 def try_catch():
     return str([_try_catch(_raise_1), _try_catch(_raise_2), _try_catch(_relu)])
+
+
+def bare_except():
+    try:
+        raise ValueError()
+    except:
+        return str(sys.exc_info()[1])
+
+
+def except_info():
+    try:
+        raise ValueError()
+    except Exception:
+        return str(sys.exc_info()[1])
+
+
+def finally_1():
+    a = 0
+    b = 0
+    for i in range(4096):
+        try:
+            a += 1
+            if (i * 31) % 10 + i % 100 == 101:
+                break
+        finally:
+            b += 1
+    return a, b
+
+
+def finally_2():
+    a = 0
+    b = 0
+    for i in range(4096):
+        a += 1
+        try:
+            if (i * 31) % 10 + i % 100 == 101:
+                continue
+        finally:
+            b += 1
+    return a, b
+
+
+def finally_3():
+    try:
+        raise Exception()
+    except Exception:
+        pass
+    finally:
+        return 1

@@ -571,11 +571,13 @@ namespace yapyjit {
 		auto target = emit_ctx->get_reg(dst);
 		auto tyck = emit_ctx->new_temp_reg(MIR_T_I64);
 		auto mem = (PyObject**)ctx->allocate_fill(sizeof(PyObject*) * 3);
-		emit_ctx->append_insn(MIR_CALL, {
-			emit_ctx->parent->new_proto(MIRType<int>::t, { MIR_T_P }),
-			(int64_t)PyErr_ExceptionMatches, tyck, emit_ctx->get_reg(ty)
-		});
-		emit_ctx->append_insn(MIR_BF, { ensure_label(ctx, failjump), tyck });
+		if (ty != -1) {
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIRType<int>::t, { MIR_T_P }),
+				(int64_t)PyErr_ExceptionMatches, tyck, emit_ctx->get_reg(ty)
+			});
+			emit_ctx->append_insn(MIR_BF, { ensure_label(ctx, failjump), tyck });
+		}
 		// printf("%p %p\n", mem, mem + 1);
 		emit_ctx->append_insn(MIR_CALL, {
 			emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
@@ -592,15 +594,15 @@ namespace yapyjit {
 			(intptr_t)(mem + 2)
 		});
 		emit_ctx->append_insn(MIR_MOV, {
-			target, MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem + 1))
-		});
-		emit_disown(emit_ctx, target);
-		emit_ctx->append_insn(MIR_MOV, {
-			target, MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem + 2))
-		});
-		emit_disown(emit_ctx, target);
-		emit_ctx->append_insn(MIR_MOV, {
 			target, MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem))
+		});
+		emit_newown(emit_ctx, target);
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyErr_SetExcInfo,
+			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem + 1)),
+			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem)),
+			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(mem + 2))
 		});
 	}
 

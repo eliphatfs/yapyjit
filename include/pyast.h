@@ -670,14 +670,17 @@ namespace yapyjit {
 			// Start error handlers
 			for (auto& handler : handlers) {
 				auto end = std::make_unique<LabelIns>();
+				auto bounderr = new_temp_var(appender);
 				if (handler.type) {
 					auto ty = handler.type->emit_ir(appender);
-					auto bounderr = new_temp_var(appender);
 					appender.new_insn(new CheckErrorTypeIns(end.get(), bounderr, ty));
 					if (handler.name.length() > 0) {
 						auto variable = std::make_unique<Name>(handler.name);
 						assn_ir(appender, variable.get(), bounderr);
 					}
+				}
+				else {
+					appender.new_insn(new CheckErrorTypeIns(end.get(), bounderr, -1));
 				}
 				for (auto& stmt : handler.body) {
 					stmt->emit_ir(appender);
