@@ -394,70 +394,56 @@ namespace yapyjit {
 		});
 	}
 
-	PyObject* _call_resolver(PyObject* callee, PyObject* args, PyObject* kwargs, ternaryfunc* resolved) {
+	PyObject* _fastcall_resolver(PyObject* callee, PyObject* const* args, size_t nargsf, PyObject* kwnames, vectorcallfunc* resolved) {
 		// TODO: don't forget to check recursion limit when exception is supported
-		auto tpcall = Py_TYPE(callee)->tp_call;
-		if (tpcall) {
-			*resolved = *tpcall;
-			return (*tpcall)(callee, args, kwargs);
+		auto veccall = _PyVectorcall_Function(callee);
+		if (veccall) {
+			*resolved = veccall;
+			return veccall(callee, args, nargsf, kwnames);
+		}
+		else {
+			*resolved = _PyObject_Vectorcall;
+			return _PyObject_Vectorcall(callee, args, nargsf, kwnames);
 		}
 		return nullptr;
 	}
 
 	void emit_call(Function* ctx, MIRRegOp target, MIRRegOp pyfn, const std::vector<int>& args, const std::map<std::string, int>& kwargs) {
 		auto emit_ctx = ctx->emit_ctx.get();
-		auto tuple_fill = PyTuple_New((Py_ssize_t)args.size());
-		if (!tuple_fill) throw registered_pyexc();
-		ctx->emit_keeprefs.push_back(ManagedPyo(tuple_fill));
+		auto args_fill = (PyObject**)ctx->allocate_fill((args.size() + kwargs.size()) * sizeof(PyObject*));
+		auto kwnames_fill = PyTuple_New((Py_ssize_t)kwargs.size());
+		if (!kwnames_fill) throw registered_pyexc();
+		ctx->emit_keeprefs.push_back(ManagedPyo(kwnames_fill));
 
 		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
-		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
+		int i;
+		for (i = 0; i < args.size(); i++) {
 			emit_ctx->append_insn(MIR_MOV, {
-				MIRMemOp(
-					MIR_T_P, MIRRegOp(0),
-					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
-				),
+				MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(args_fill + i)),
 				ctx->emit_ctx->get_reg(args[i])
 			});
+		}
+		for (const auto& kwarg : kwargs) {
+			PyTuple_SET_ITEM(
+				kwnames_fill, i - args.size(), PyUnicode_FromString(kwarg.first.c_str())
+			);
+			emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(args_fill + i)),
+				ctx->emit_ctx->get_reg(kwarg.second)
+			});
+			i++;
 		}
 		// emit_debug_print_pyo(emit_ctx, pyfn);
 		// emit_debug_print_pyo(emit_ctx, (intptr_t)tuple_fill);
 		if (kwargs.size() == 0) {
-			emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
-				ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)nullptr
+			emit_call_icached<1, PyObject*, PyObject*, PyObject* const*, size_t, PyObject*>(
+				ctx, _fastcall_resolver, { pyfn }, target, pyfn, (int64_t)args_fill, args.size(), (int64_t)nullptr
 			);
 		}
 		else {
-			auto kw_fill = PyDict_New();
-			if (!kw_fill) throw registered_pyexc();
-			ctx->emit_keeprefs.push_back(ManagedPyo(kw_fill));
-			for (const auto& kwarg : kwargs) {
-				emit_ctx->append_insn(MIR_CALL, {
-					emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
-					(intptr_t)PyDict_SetItemString,
-					(intptr_t)kw_fill,
-					(intptr_t)kwarg.first.c_str(), ctx->emit_ctx->get_reg(kwarg.second)
-				});
-			}
-			emit_call_icached<1, PyObject*, PyObject*, PyObject*, PyObject*>(
-				ctx, _call_resolver, { pyfn }, target, pyfn, (int64_t)tuple_fill, (int64_t)kw_fill
+			emit_call_icached<1, PyObject*, PyObject*, PyObject* const*, size_t, PyObject*>(
+				ctx, _fastcall_resolver, { pyfn }, target, pyfn, (int64_t)args_fill, args.size(), (int64_t)kwnames_fill
 			);
-			emit_ctx->append_insn(MIR_CALL, {
-				emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P}),
-				(intptr_t)PyDict_Clear,
-				(intptr_t)kw_fill
-			});
-
-		}
-
-		for (int i = 0; i < PyTuple_GET_SIZE(tuple_fill); i++) {
-			emit_ctx->append_insn(MIR_MOV, {
-				MIRMemOp(
-					MIR_T_P, MIRRegOp(0),
-					(intptr_t)tuple_fill + offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
-				),
-				0
-			});
 		}
 
 		emit_error_check(ctx, target);
@@ -654,7 +640,7 @@ namespace yapyjit {
 				targ,
 				MIRMemOp(
 					MIR_T_P, func.emit_ctx->get_arg(1),
-					offsetof(PyTupleObject, ob_item) + i * sizeof(PyObject*)
+					i * sizeof(PyObject*)
 				)
 			});
 			emit_newown(func.emit_ctx.get(), targ);

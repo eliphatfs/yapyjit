@@ -10,8 +10,13 @@ typedef struct {
     MIR_item_t generated;
     std::map<std::string, int>* argidlookup;
     std::vector<PyObject*>* defaults;
+    std::vector<PyObject*>* callfill;
+    vectorcallfunc callableimpl;
     PyObject* extattrdict;
 } WrappedFunctionObject;
+
+static PyObject*
+wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames);
 
 static void
 wf_dealloc(WrappedFunctionObject* self)
@@ -20,6 +25,7 @@ wf_dealloc(WrappedFunctionObject* self)
     self->compiled.reset(nullptr);
     delete self->argidlookup;
     delete self->defaults;
+    delete self->callfill;
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -35,6 +41,8 @@ wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
         self->generated = nullptr;
         self->argidlookup = new std::map<std::string, int>();
         self->defaults = new std::vector<PyObject*>();
+        self->callfill = new std::vector<PyObject*>();
+        self->callableimpl = (vectorcallfunc)wf_fastcall;
     }
     return (PyObject*)self;
 }
@@ -135,39 +143,30 @@ static PyTypeObject wf_type = {
     PyVarObject_HEAD_INIT(NULL, 0)
 };
 
-static PyObject*
-wf_call(WrappedFunctionObject* self, PyObject* args, PyObject* kwargs) {
-    assert(PyTuple_CheckExact(args));
-    PyObject* newargs = nullptr;
-    Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
-    if (kwargs || PyTuple_GET_SIZE(args) < nargs) {
-        newargs = PyTuple_New(self->defaults->size());
-        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(args); i++) {
-            PyTuple_SET_ITEM(newargs, i, PyTuple_GET_ITEM(args, i));
-        }
-        for (Py_ssize_t i = PyTuple_GET_SIZE(args); i < nargs; i++) {
-            PyTuple_SET_ITEM(newargs, i, self->defaults->at(i));
-        }
-        args = newargs;
-    }
-    if (kwargs) {
-        assert(PyDict_CheckExact(kwargs));
-        PyObject* key, * value;
-        Py_ssize_t pos = 0;
+typedef PyObject* (*_yapyjit_fastercall) (WrappedFunctionObject*, PyObject* const*);
 
-        while (PyDict_Next(kwargs, &pos, &key, &value)) {
-            assert(PyUnicode_CheckExact(key));
-            auto name = PyUnicode_AsUTF8(key);
-            PyTuple_SET_ITEM(newargs, self->argidlookup->at(name), value);
+static PyObject*
+wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
+    Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
+    auto callargs = args;
+    auto posargs = PyVectorcall_NARGS(nargsf);
+    if (kwnames || posargs < nargs) {
+        self->callfill->clear();
+        for (Py_ssize_t i = 0; i < posargs; i++) {
+            self->callfill->push_back(args[i]);
+        }
+        for (Py_ssize_t i = posargs; i < nargs; i++) {
+            self->callfill->push_back(self->defaults->at(i));
+        }
+        callargs = self->callfill->data();
+    }
+    if (kwnames) {
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(kwnames); i++) {
+            auto name = PyUnicode_AsUTF8(PyTuple_GET_ITEM(kwnames, i));
+            (*self->callfill)[self->argidlookup->at(name)] = args[posargs + i];
         }
     }
-    auto result = ((PyCFunction)(self->generated->addr))((PyObject*)self, args);
-    if (newargs) {
-        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(newargs); i++) {
-            PyTuple_SET_ITEM(newargs, i, NULL);
-        }
-        Py_DECREF(newargs);
-    }
+    auto result = ((_yapyjit_fastercall)(self->generated->addr))(self, callargs);
     return result;
 }
 
@@ -176,7 +175,7 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_doc = "Jitted functions";
     wf_type.tp_basicsize = sizeof(WrappedFunctionObject);
     wf_type.tp_itemsize = 0;
-    wf_type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_METHOD_DESCRIPTOR;
+    wf_type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_METHOD_DESCRIPTOR | _Py_TPFLAGS_HAVE_VECTORCALL;
 
     wf_type.tp_new = wf_new;
     wf_type.tp_init = (initproc)yapyjit::guarded<wf_init>();
@@ -184,7 +183,8 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_members = wf_members;
     wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extattrdict);
     wf_type.tp_methods = wf_methods;
-    wf_type.tp_call = (ternaryfunc)wf_call;
+    wf_type.tp_call = PyVectorcall_Call;
+    wf_type.tp_vectorcall_offset = offsetof(WrappedFunctionObject, callableimpl);
     wf_type.tp_descr_get = wf_descr_get;
 
     if (PyType_Ready(&wf_type) < 0)
