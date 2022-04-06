@@ -23,16 +23,10 @@ namespace yapyjit {
 	}
 
 	void RaiseIns::emit(Function* func) {
-		auto cls = func->emit_ctx->new_temp_reg(MIR_T_I64);
-		func->emit_ctx->append_insn(MIR_CALL, {
-			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P }),
-			(int64_t)PyObject_Type, cls, func->emit_ctx->get_reg(exc)
-		});
 		func->emit_ctx->append_insn(MIR_CALL, {
 			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
-			(int64_t)PyErr_SetObject, cls, func->emit_ctx->get_reg(exc)
+			(int64_t)do_raise_copy, func->emit_ctx->get_reg(exc), (intptr_t)nullptr
 		});
-		emit_disown(func->emit_ctx.get(), cls);
 
 		func->emit_ctx->append_insn(MIR_MOV, { func->return_reg, (intptr_t)nullptr });
 		func->emit_ctx->append_insn(MIR_JMP, { func->error_label });
