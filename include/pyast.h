@@ -439,6 +439,12 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> targets;
 		Assign(std::unique_ptr<AST>&& expr_, std::vector<std::unique_ptr<AST>>& targets_)
 			: expr(std::move(expr_)), targets(std::move(targets_)) {}
+		Assign(std::unique_ptr<AST>&& expr_) : expr(std::move(expr_)) {
+		}
+		Assign(std::unique_ptr<AST>&& expr_, std::unique_ptr<AST>&& target)
+			: expr(std::move(expr_)) {
+			targets.push_back(std::move(target));
+		}
 		virtual int emit_ir(Function& appender) {
 			int src = expr->emit_ir(appender);
 			for (auto& target : targets) {
@@ -694,6 +700,7 @@ namespace yapyjit {
 			appender.add_insn(std::move(label_blk_next));
 			for (auto& stmt : finalbody)
 				stmt->emit_ir(appender);
+			appender.new_insn(new ClearErrorCtxIns());
 			return -1;
 		}
 	};
@@ -825,6 +832,10 @@ namespace yapyjit {
 		}
 		if (destruct_targets != nullptr) {
 			// TODO: optimize by stashing all elm into mem first
+			auto source_cpy = new_temp_var(appender);
+			appender.new_insn(new MoveIns(
+				source_cpy, src
+			));
 			for (size_t i = 0; i < destruct_targets->size(); i++) {
 				auto visit = new_temp_var(appender);
 				auto idx = new_temp_var(appender);
@@ -832,7 +843,7 @@ namespace yapyjit {
 					idx, ManagedPyo(PyLong_FromSize_t(i), true)
 				));
 				appender.new_insn(new LoadItemIns(
-					idx, visit, src
+					idx, visit, source_cpy
 				));
 				assn_ir(appender, destruct_targets->at(i).get(), visit);
 			}

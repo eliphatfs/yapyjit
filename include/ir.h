@@ -37,6 +37,7 @@ namespace yapyjit {
 		DELATTR,
 		DELITEM,
 		ERRORPROP,
+		CLEARERRORCTX,
 		ITERNEXT,
 		JUMP,
 		JUMPTRUTHY,
@@ -421,6 +422,14 @@ namespace yapyjit {
 	public:
 		virtual std::string pretty_print() {
 			return "errorprop";
+		}
+		virtual void emit(Function* func);
+	};
+
+	class ClearErrorCtxIns : public InsnWithTag<InsnTag::CLEARERRORCTX> {
+	public:
+		virtual std::string pretty_print() {
+			return "clearerrorctx";
 		}
 		virtual void emit(Function* func);
 	};

@@ -14,3 +14,9 @@ def error_init():
     to input tuple in the PyCFunction calling convention.
     """
     return str(ValueError("foo"))
+
+
+def destruct_order():
+    a = [1, 2]
+    a, _ = a
+    return a

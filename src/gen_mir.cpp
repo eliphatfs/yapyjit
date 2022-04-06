@@ -604,6 +604,15 @@ namespace yapyjit {
 		func->emit_ctx->append_insn(MIR_JMP, { func->error_label });
 	}
 
+	void ClearErrorCtxIns::emit(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+			(int64_t)PyErr_SetExcInfo,
+			0, 0, 0
+		});
+	}
+
 	void SetErrorLabelIns::emit(Function* func) {
 		if (target)
 			func->error_label = ensure_label(func, target);

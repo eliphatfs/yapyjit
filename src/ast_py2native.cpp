@@ -57,11 +57,9 @@ namespace yapyjit {
 		auto result = std::make_unique<ValueBlock>();
 		auto init_fn = new Constant(init_callable);
 		auto comp_name = std::string("_yapyjit_comp_r_") + std::to_string((intptr_t)ast_man.borrow());
-		std::vector<std::unique_ptr<AST>> assned;
-		assned.push_back(std::unique_ptr<AST>(new Name(comp_name)));
 		result->new_stmt(new Assign(
 			std::unique_ptr<AST>(new Call(std::unique_ptr<AST>(init_fn))),
-			assned
+			std::unique_ptr<AST>(new Name(comp_name))
 		));
 		std::vector<ManagedPyo> names;
 		for (auto gen : ast_man.attr("generators")) {
@@ -345,6 +343,42 @@ namespace yapyjit {
 				}
 				return std::unique_ptr<Try>(nast);
 			}
+			TARGET(With) {
+				auto nast = new Try();
+				for (auto item : ast_man.attr("items")) {
+					auto with_name = std::string("_yapyjit_with_r_") + std::to_string((intptr_t)item.borrow());
+					nast->body.push_back(std::unique_ptr<AST>(new Assign(
+						ast_py2native(item.attr("context_expr")),
+						std::unique_ptr<AST>(new Name(with_name))
+					)));
+					auto enter = std::unique_ptr<AST>(new Call(
+						std::unique_ptr<AST>(new Attribute(std::unique_ptr<AST>(new Name(with_name)), "__enter__"))
+					));
+					if (item.attr("optional_vars") == Py_None) {
+						nast->body.push_back(std::unique_ptr<AST>(new Assign(std::move(enter))));
+					}
+					else {
+						nast->body.push_back(std::unique_ptr<AST>(new Assign(
+							std::move(enter),
+							ast_py2native(item.attr("optional_vars"))
+						)));
+					}
+				}
+				for (auto stmt : ast_man.attr("body"))
+					nast->body.push_back(ast_py2native(stmt));
+				for (auto item : ast_man.attr("items")) {
+					auto with_name = std::string("_yapyjit_with_r_") + std::to_string((intptr_t)item.borrow());
+					auto exit = new Call(
+						std::unique_ptr<AST>(new Attribute(std::unique_ptr<AST>(new Name(with_name)), "__exit__"))
+					);
+					for (int i = 0; i < 3; i++)
+						exit->args.push_back(std::unique_ptr<AST>(
+							new Constant(ManagedPyo(Py_None, true))
+						));
+					nast->finalbody.push_back(std::unique_ptr<AST>(new Assign(std::unique_ptr<AST>(exit))));
+				}
+				return std::unique_ptr<Try>(nast);
+			}
 			TARGET(Return) {
 				auto val = ast_man.attr("value");
 				if (val == Py_None) {
@@ -451,20 +485,17 @@ namespace yapyjit {
 					ast_py2native(ast_man.attr("value")),
 					op
 				);
-				std::vector<std::unique_ptr<AST>> targets;
-				targets.push_back(ast_py2native(ast_man.attr("target")));
 				return std::make_unique<Assign>(
-					std::move(binop), targets
+					std::move(binop),
+					ast_py2native(ast_man.attr("target"))
 				);
 			}
 			TARGET(AnnAssign) {
 				auto val = ast_man.attr("value");
 				if (val == Py_None)
 					return std::make_unique<Pass>();
-				std::vector<std::unique_ptr<AST>> targets;
-				targets.push_back(ast_py2native(ast_man.attr("target")));
 				return std::make_unique<Assign>(
-					ast_py2native(val), targets
+					ast_py2native(val), ast_py2native(ast_man.attr("target"))
 				);
 			}
 			TARGET(Pass) {

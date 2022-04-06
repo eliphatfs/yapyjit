@@ -320,3 +320,29 @@ def finally_3():
         pass
     finally:
         return 1
+
+
+class CtxManager(object):
+    def __init__(self) -> None:
+        self.x = self.y = self.z = 0
+        self.w = 42
+
+    def __enter__(self):
+        self.x += 1
+        return self, 9
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.y += 2
+        self.z = exc_type
+
+
+def with_1():
+    with CtxManager() as cmx:
+        cm, _ = cmx
+        return cm.x, cm.y, cm.z
+
+
+def with_2():
+    with CtxManager() as cmx:
+        cm, _ = cmx
+    return cm.x, cm.y, cm.z
