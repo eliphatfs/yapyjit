@@ -23,10 +23,16 @@ namespace yapyjit {
 	}
 
 	void RaiseIns::emit(Function* func) {
-		func->emit_ctx->append_insn(MIR_CALL, {
-			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
-			(int64_t)do_raise_copy, func->emit_ctx->get_reg(exc), (intptr_t)nullptr
-		});
+		if (exc != -1)
+			func->emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
+				(int64_t)do_raise_copy, func->emit_ctx->get_reg(exc), (intptr_t)nullptr
+			});
+		else
+			func->emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
+				(int64_t)do_raise_copy, (intptr_t)nullptr, (intptr_t)nullptr
+			});
 
 		func->emit_ctx->append_insn(MIR_MOV, { func->return_reg, (intptr_t)nullptr });
 		func->emit_ctx->append_insn(MIR_JMP, { func->error_label });

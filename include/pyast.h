@@ -629,8 +629,12 @@ namespace yapyjit {
 		Raise(std::unique_ptr<AST>&& exc_) : exc(std::move(exc_)) {
 		}
 		virtual int emit_ir(Function& appender) {
-			auto exc_v = exc->emit_ir(appender);
-			appender.new_insn(new RaiseIns(exc_v));
+			if (exc) {
+				auto exc_v = exc->emit_ir(appender);
+				appender.new_insn(new RaiseIns(exc_v));
+			}
+			else
+				appender.new_insn(new RaiseIns(-1));
 			return -1;
 		}
 	};

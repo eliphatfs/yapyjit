@@ -115,7 +115,8 @@ namespace yapyjit {
 			}
 			case InsnTag::RAISE: {
 				auto insn_b = (RaiseIns*)insn.get();
-				result.use[insn_b->exc].push_back(insn_b);
+				if (insn_b->exc != -1)
+					result.use[insn_b->exc].push_back(insn_b);
 				break;
 			}
 			case InsnTag::RETURN: {

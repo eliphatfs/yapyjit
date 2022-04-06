@@ -321,7 +321,7 @@ namespace yapyjit {
 			TARGET(Raise) {
 				auto val = ast_man.attr("exc");
 				return std::make_unique<Raise>(
-					ast_py2native(val)
+					val == Py_None ? nullptr : ast_py2native(val)
 				);
 			}
 			TARGET(Try) {

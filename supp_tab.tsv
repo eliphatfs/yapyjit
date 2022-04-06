@@ -2,7 +2,7 @@ Statements			Expressions
 Return	1		BoolOp	1		P means partial
 Delete	1		NamedExpr	1		AugAssign: a += b always translated as a = a + b
 Assign	1		BinOp	1		With: __exit__ cannot suppress error propagation
-AugAssign	P		UnaryOp	1		Raise: reraise and raise from not supported
+AugAssign	P		UnaryOp	1		Raise: raise from not supported
 AnnAssign	1		Lambda			GeneratorExp: executes eagerly and not lazily
 For	1		IfExp	1		
 While	1		Dict	1		

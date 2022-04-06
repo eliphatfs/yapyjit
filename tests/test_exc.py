@@ -22,6 +22,14 @@ def test_raise_class():
     raise TestException
 
 
+@yapyjit.jit
+def test_reraise():
+    try:
+        raise TestException
+    except TestException:
+        raise
+
+
 class TestExceptions(unittest.TestCase):
 
     def test_raise(self):
@@ -30,6 +38,9 @@ class TestExceptions(unittest.TestCase):
 
     def test_raise_class(self):
         self.assertRaises(TestException, test_raise_class)
+
+    def test_reraise(self):
+        self.assertRaises(TestException, test_reraise)
 
 
 if __name__ == "__main__":
