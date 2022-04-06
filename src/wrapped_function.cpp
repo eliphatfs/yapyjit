@@ -126,7 +126,7 @@ static PyMethodDef wf_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-static PyTypeObject wf_type = {
+PyTypeObject wf_type = {
     PyVarObject_HEAD_INIT(NULL, 0)
 };
 
@@ -158,7 +158,7 @@ wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, P
 }
 
 int yapyjit::initialize_wf(PyObject* m) {
-    wf_type.tp_name = "yapyjit.jit";
+    wf_type.tp_name = "yapyjit.JittedFunc";
     wf_type.tp_doc = "Jitted functions";
     wf_type.tp_basicsize = sizeof(WrappedFunctionObject);
     wf_type.tp_itemsize = 0;
@@ -178,7 +178,7 @@ int yapyjit::initialize_wf(PyObject* m) {
         return -1;
 
     Py_INCREF(&wf_type);
-    if (PyModule_AddObject(m, "jit", (PyObject*)&wf_type) < 0) {
+    if (PyModule_AddObject(m, "JittedFunc", (PyObject*)&wf_type) < 0) {
         Py_DECREF(&wf_type);
         return -1;
     }

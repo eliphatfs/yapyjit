@@ -53,3 +53,5 @@ typedef struct {
     vectorcallfunc callableimpl;
     PyObject* extattrdict;
 } WrappedFunctionObject;
+
+extern PyTypeObject wf_type;

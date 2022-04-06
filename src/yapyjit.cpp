@@ -28,11 +28,21 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
     return PyUnicode_FromString(ss.str().c_str());
 }
 
+
+PyDoc_STRVAR(yapyjit_jit_doc, "jit(obj)\
+\
+Jit compiles a python function.");
+
+PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
+    return PyObject_Call((PyObject*)&wf_type, args, nullptr);
+}
+
 /*
  * List of functions to add to yapyjit in exec_yapyjit().
  */
 static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
+    { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 
