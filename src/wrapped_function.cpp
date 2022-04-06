@@ -1,19 +1,6 @@
-#include <map>
 #include <yapyjit.h>
 #include <ir.h>
 #include "structmember.h"
-
-typedef struct {
-    PyObject_HEAD
-    PyObject* wrapped;
-    std::unique_ptr<yapyjit::Function> compiled;
-    MIR_item_t generated;
-    std::map<std::string, int>* argidlookup;
-    std::vector<PyObject*>* defaults;
-    std::vector<PyObject*>* callfill;
-    vectorcallfunc callableimpl;
-    PyObject* extattrdict;
-} WrappedFunctionObject;
 
 static PyObject*
 wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames);

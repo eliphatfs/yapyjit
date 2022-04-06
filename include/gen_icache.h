@@ -172,4 +172,37 @@ namespace yapyjit {
         });
         emit_ctx->append_label(end_label);
     }
+
+    template<size_t ncheck>
+    inline std::pair<MIRLabelOp, MIRMemOp> emit_dcache_skip(
+        Function* func,
+        std::array<MIROp, ncheck> idxchk,
+        MIRRegOp ret
+    ) {
+        auto emit_ctx = func->emit_ctx.get();
+        auto resolve_label = emit_ctx->new_label();
+        auto skip_label = emit_ctx->new_label();
+
+        auto icache_fill = (icache_t<ncheck>*)func->allocate_fill(sizeof(icache_t<ncheck>));
+        auto cache_addr = MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)&icache_fill->addr);
+
+        for (size_t i = 0; i < ncheck; i++) {
+            emit_ctx->append_insn(MIR_BNE, {
+                resolve_label,
+                MIRMemOp(MIR_T_P, MIRRegOp(0), (int64_t)&icache_fill->ty[i]),
+                idxchk[i]
+            });
+        }
+        emit_ctx->append_insn(MIR_MOV, { ret, cache_addr });
+        emit_ctx->append_insn(MIR_JMP, { skip_label });
+        emit_ctx->append_label(resolve_label);
+        emit_ctx->append_insn(MIR_MOV, { ret, (intptr_t)nullptr });
+        for (size_t i = 0; i < ncheck; i++) {
+            emit_ctx->append_insn(MIR_MOV, {
+                MIRMemOp(MIR_T_P, MIRRegOp(0), (int64_t)&icache_fill->ty[i]),
+                idxchk[i]
+            });
+        }
+        return std::make_pair(skip_label, cache_addr);
+    }
 };

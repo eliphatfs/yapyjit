@@ -543,21 +543,31 @@ namespace yapyjit {
 		);
 		ctx->emit_keeprefs.push_back(attr_obj);
 		auto mthd_obj = (PyObject**)ctx->allocate_fill(sizeof(PyObject*));
+		auto pyfn = emit_ctx->new_temp_reg(MIR_T_I64);
+
+		auto dcache_pair = emit_dcache_skip<1>(ctx, {
+			MIRMemOp(MIR_T_P, objreg, offsetof(PyObject, ob_type))
+		}, pyfn);
+		emit_ctx->append_label(dcache_pair.first);
+		auto label_cachehit = emit_jump_if(emit_ctx, pyfn);
 		emit_ctx->append_insn(MIR_CALL, {
 			emit_ctx->parent->new_proto(MIRType<int>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
 			(int64_t)_PyObject_GetMethod_Copy, is_bound_mthd, objreg, (int64_t)attr_obj.borrow(), (intptr_t)mthd_obj
 		});
-		auto lab_deopt = emit_jump_if_not(emit_ctx, is_bound_mthd);
-		// opt code
-		auto pyfn = emit_ctx->new_temp_reg(MIR_T_I64);
-		auto args_mod(args);
-		args_mod.insert(args_mod.begin(), obj);
 		emit_ctx->append_insn(MIR_MOV, {
 			pyfn,
 			MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)mthd_obj)
 		});
+		auto lab_deopt = emit_jump_if_not(emit_ctx, is_bound_mthd);
+		emit_ctx->append_insn(MIR_MOV, {
+			dcache_pair.second, pyfn
+		});
+		emit_ctx->append_label(label_cachehit);
+		// opt code
+		auto args_mod(args);
+		args_mod.insert(args_mod.begin(), obj);
 		emit_call(ctx, target, pyfn, args_mod, ((CallIns*)orig_call.get())->kwargs);
-		emit_disown(emit_ctx, pyfn);
+		// emit_disown(emit_ctx, pyfn);
 		auto end_label = emit_ctx->new_label();
 		emit_ctx->append_insn(MIR_JMP, { end_label });
 		emit_ctx->append_label(lab_deopt);

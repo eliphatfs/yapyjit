@@ -1,5 +1,7 @@
 #pragma once
 #include <memory>
+#include <map>
+#include <vector>
 #include <Python.h>
 #include <mpyo.h>
 #include <pyast.h>
@@ -39,3 +41,15 @@ namespace yapyjit {
         return funcast->emit_ir_f();
     }
 }
+
+typedef struct {
+    PyObject_HEAD
+        PyObject* wrapped;
+    std::unique_ptr<yapyjit::Function> compiled;
+    MIR_item_t generated;
+    std::map<std::string, int>* argidlookup;
+    std::vector<PyObject*>* defaults;
+    std::vector<PyObject*>* callfill;
+    vectorcallfunc callableimpl;
+    PyObject* extattrdict;
+} WrappedFunctionObject;
