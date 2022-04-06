@@ -4,6 +4,7 @@
 #include <yapyjit.h>
 #include <exc_conv.h>
 #include <pyast.h>
+using namespace yapyjit;
 
 
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
@@ -38,13 +39,45 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, "O", &thearg)) {
         return nullptr;
     }
-    if (thearg && Py_TYPE(thearg) == &wf_type) {
-        Py_INCREF(thearg);
-        return thearg;
+    if (thearg) {
+        if (Py_TYPE(thearg) == &wf_type) {
+            Py_INCREF(thearg);
+            return thearg;
+        }
+        else if (Py_TYPE(thearg) == &PyType_Type) {
+            auto mncls = ManagedPyo(thearg, true);
+            for (auto attr : ManagedPyo(PyObject_Dir(thearg))) {
+                auto fn = mncls.attr(attr.to_cstr());
+                if (PyFunction_Check(fn.borrow())) {
+                    auto argtuple = PyTuple_New(2);
+                    PyTuple_SET_ITEM(argtuple, 0, fn.transfer());
+                    Py_INCREF(thearg);
+                    PyTuple_SET_ITEM(argtuple, 1, thearg);
+                    auto obj = PyObject_Call((PyObject*)&wf_type, argtuple, nullptr);
+                    if (!obj)
+                        continue;
+                    mncls.attr(
+                        attr.to_cstr(), obj
+                    );
+                    Py_DECREF(argtuple);
+                }
+            }
+            Py_INCREF(thearg);
+            return thearg;
+        }
+        else {
+            auto argtuple = PyTuple_New(2);
+            Py_INCREF(thearg);
+            PyTuple_SET_ITEM(argtuple, 0, thearg);
+            Py_INCREF(Py_None);
+            PyTuple_SET_ITEM(argtuple, 1, Py_None);
+            auto result = PyObject_Call((PyObject*)&wf_type, argtuple, nullptr);
+            Py_DECREF(argtuple);
+            return result;
+        }
     }
-    else {
-        return PyObject_Call((PyObject*)&wf_type, args, nullptr);
-    }
+    else
+        return nullptr;
 }
 
 /*

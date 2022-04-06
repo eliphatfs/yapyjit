@@ -465,10 +465,12 @@ namespace yapyjit {
 	class Function {
 	public:
 		ManagedPyo globals_ns;
+		ManagedPyo py_cls;
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
 		std::map<std::string, int> locals;
 		std::set<std::string> globals;
+		std::map<std::string, int> slot_offsets;
 		int nargs;
 		/*struct {
 			LabelIns* cont_pt, * break_pt, *error_start;
@@ -483,7 +485,7 @@ namespace yapyjit {
 		MIRRegOp return_reg;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
 		Function(ManagedPyo globals_ns_, std::string name_, int nargs_) :
-			globals_ns(globals_ns_), name(name_), nargs(nargs_),
+			globals_ns(globals_ns_), py_cls(Py_None, true), name(name_), nargs(nargs_),
 			return_reg(0), epilogue_label(nullptr), error_label(nullptr) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.

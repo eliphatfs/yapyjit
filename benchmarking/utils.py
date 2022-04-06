@@ -15,6 +15,12 @@ def jittify(globals_dict):
         return
     for key, obj in globals_dict.items():
         if isinstance(obj, type) and issubclass(obj, object):
+            try:
+                globals_dict[key] = yapyjit.jit(obj)
+            except Exception as exc:
+                if "NOWARN" not in os.environ.get("YAPYJIT_FLAGS", ""):
+                    print("Warning: JIT failed for {}".format(obj))
+                    print(exc)
             for attr in dir(obj):
                 maybe_method = getattr(obj, attr)
                 if isinstance(maybe_method, types.FunctionType):

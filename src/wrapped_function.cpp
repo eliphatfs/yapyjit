@@ -37,8 +37,8 @@ wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
 static int
 wf_init(WrappedFunctionObject* self, PyObject* args)
 {
-    PyObject* pyfunc = NULL;
-    if (!PyArg_ParseTuple(args, "O", &pyfunc)) {
+    PyObject* pyfunc = NULL, *pyclass = NULL;
+    if (!PyArg_ParseTuple(args, "OO", &pyfunc, &pyclass)) {
         return -1;
     }
 
@@ -84,6 +84,8 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
             throw std::invalid_argument(std::string("varargs and varkw funcs are not supported yet."));
         }
         self->compiled = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc));
+        if (pyclass && pyclass != Py_None)
+            self->compiled->py_cls = yapyjit::ManagedPyo(pyclass, true);
         self->generated = yapyjit::generate_mir(*self->compiled);
     }
     return 0;

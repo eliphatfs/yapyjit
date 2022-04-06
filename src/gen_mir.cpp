@@ -1,5 +1,6 @@
 #include <gen_common.h>
 #include <gen_icache.h>
+#include "structmember.h"
 // #include <mir_link.h>
 
 namespace yapyjit {
@@ -177,16 +178,45 @@ namespace yapyjit {
 	}
 
 	void StoreAttrIns::emit(Function* func) {
-		auto source = func->emit_ctx->get_reg(src);
-		auto obj = func->emit_ctx->get_reg(dst);
+		auto emit_ctx = func->emit_ctx.get();
+		auto source = emit_ctx->get_reg(src);
+		auto obj = emit_ctx->get_reg(dst);
 		auto attr_obj = ManagedPyo(
 			PyUnicode_FromString(name.c_str())
 		);
 		func->emit_keeprefs.push_back(attr_obj);
+		MIRLabelOp fast_label(nullptr);
+		auto slot_it = func->slot_offsets.find(name);
+		if (slot_it != func->slot_offsets.end()) {
+			fast_label = emit_ctx->new_label();
+			emit_ctx->append_insn(MIR_BEQ, {
+				fast_label,
+				MIRMemOp(MIR_T_P, obj, offsetof(PyObject, ob_type)),
+				(intptr_t)func->py_cls.borrow()
+			});
+		}
 		func->emit_ctx->append_insn(MIR_CALL, {
 			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_SetAttr, obj, (int64_t)attr_obj.borrow(), source
 		});
+		if (slot_it != func->slot_offsets.end()) {
+			auto skip = emit_ctx->new_label();
+			emit_ctx->append_insn(MIR_JMP, { skip });
+			emit_ctx->append_label(fast_label);
+			// emit_debug_print_pyo(emit_ctx, (intptr_t)PyUnicode_FromString("store slot! fast path!"));
+			emit_newown(emit_ctx, source);
+			auto old = emit_ctx->new_temp_reg(MIR_T_I64);
+			emit_ctx->append_insn(MIR_MOV, {
+				old,
+				MIRMemOp(MIR_T_P, obj, slot_it->second)
+			});
+			emit_disown(emit_ctx, old);
+			emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(MIR_T_P, obj, slot_it->second),
+				source
+			});
+			emit_ctx->append_label(skip);
+		}
 	}
 
 	void DelAttrIns::emit(Function* func) {
@@ -203,16 +233,39 @@ namespace yapyjit {
 
 	void LoadAttrIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);
-		emit_disown(func->emit_ctx.get(), target);
-		auto obj = func->emit_ctx->get_reg(src);
+		auto emit_ctx = func->emit_ctx.get();
+		emit_disown(emit_ctx, target);
+		auto obj = emit_ctx->get_reg(src);
 		auto attr_obj = ManagedPyo(
 			PyUnicode_FromString(name.c_str())
 		);
 		func->emit_keeprefs.push_back(attr_obj);
-		func->emit_ctx->append_insn(MIR_CALL, {
-			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
+		MIRLabelOp fast_label(nullptr);
+		auto slot_it = func->slot_offsets.find(name);
+		if (slot_it != func->slot_offsets.end()) {
+			fast_label = emit_ctx->new_label();
+			emit_ctx->append_insn(MIR_BEQ, {
+				fast_label,
+				MIRMemOp(MIR_T_P, obj, offsetof(PyObject, ob_type)),
+				(intptr_t)func->py_cls.borrow()
+			});
+		}
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_GetAttr, target, obj, (int64_t)attr_obj.borrow()
 		});
+		if (slot_it != func->slot_offsets.end()) {
+			auto skip = emit_ctx->new_label();
+			emit_ctx->append_insn(MIR_JMP, { skip });
+			emit_ctx->append_label(fast_label);
+			// emit_debug_print_pyo(emit_ctx, (intptr_t)PyUnicode_FromString("slot! fast path!"));
+			emit_ctx->append_insn(MIR_MOV, {
+				target,
+				MIRMemOp(MIR_T_P, obj, slot_it->second)
+			});
+			emit_newown(emit_ctx, target);
+			emit_ctx->append_label(skip);
+		}
 		emit_error_check(func, target);
 	}
 
@@ -650,6 +703,14 @@ namespace yapyjit {
 		func.return_reg = func.emit_ctx->new_temp_reg(MIR_T_I64);
 		func.epilogue_label = func.emit_ctx->new_label();
 		func.error_label = func.epilogue_label;
+		if (!(func.py_cls == Py_None)) {
+			auto cls = (PyTypeObject*)func.py_cls.borrow();
+			auto memb = cls->tp_members;
+			if (memb)
+				for (int i = 0; memb[i].name; i++) {
+					func.slot_offsets[memb[i].name] = memb[i].offset;
+				}
+		}
 
 		for (auto& loc : func.locals) {
 			func.emit_ctx->new_reg(MIR_T_I64, loc.second);
