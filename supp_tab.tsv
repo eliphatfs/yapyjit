@@ -1,26 +1,26 @@
-Statements			Expressions	
-Return	1		BoolOp	1
-Delete	1		NamedExpr	1
-Assign	1		BinOp	1
-AugAssign	P		UnaryOp	1
-AnnAssign	1		Lambda	
-For	1		IfExp	1
-While	1		Dict	1
-If	1		Set	1
-With			ListComp	1
-Raise	P		SetComp	1
-Try	1		DictComp	1
-Assert	1		GeneratorExp	P
-Import			Yield	
-ImportFrom			Compare	1
-Global	1		Call	1
-Nonlocal			FormattedValue	1
-Expr	1		JoinedStr	1
-Pass 	1		Constant	1
-Break 	1		Attribute	1
-Continue	1		Subscript	1
-			Starred	
-			Name	1
-			List	1
-			Tuple	1
-			Slice	1
+Statements			Expressions			
+Return	1		BoolOp	1		P means partial
+Delete	1		NamedExpr	1		AugAssign: a += b always translated as a = a + b
+Assign	1		BinOp	1		With: __exit__ cannot suppress error propagation
+AugAssign	P		UnaryOp	1		Raise: reraise and raise from not supported
+AnnAssign	1		Lambda			GeneratorExp: executes eagerly and not lazily
+For	1		IfExp	1		
+While	1		Dict	1		
+If	1		Set	1		
+With	P		ListComp	1		
+Raise	P		SetComp	1		
+Try	1		DictComp	1		
+Assert	1		GeneratorExp	P		
+Import			Yield			
+ImportFrom			Compare	1		
+Global	1		Call	1		
+Nonlocal			FormattedValue	1		
+Expr	1		JoinedStr	1		
+Pass 	1		Constant	1		
+Break 	1		Attribute	1		
+Continue	1		Subscript	1		
+			Starred			
+			Name	1		
+			List	1		
+			Tuple	1		
+			Slice	1		

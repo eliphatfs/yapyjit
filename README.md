@@ -4,7 +4,7 @@ Still under early development. Check support for python syntax at `supp_tab.tsv`
 ## Design considerations
 1. It shall be suitable for use with all major python versions (3.8, 3.9, 3.10).
 2. It shall support all valid python, and does not need to infer all static types as in `numba`.
-3. JIT should be fast, unlike `numba` or oher LLVM-based JIT's.
+3. JIT should be fast, unlike `numba` or oher LLVM-based JIT's. Thus, [MIR](https://github.com/vnmakarov/mir) is employed as the backend.
 4. In most cases yapyjit shall be a plug-and-enable library to speed up python execution. It is a library so all CPython extensions are inherently compatible, unlike `PyPy`.
 
 ## Benchmarks
