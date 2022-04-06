@@ -34,7 +34,17 @@ PyDoc_STRVAR(yapyjit_jit_doc, "jit(obj)\
 Jit compiles a python function.");
 
 PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
-    return PyObject_Call((PyObject*)&wf_type, args, nullptr);
+    PyObject* thearg = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &thearg)) {
+        return nullptr;
+    }
+    if (thearg && Py_TYPE(thearg) == &wf_type) {
+        Py_INCREF(thearg);
+        return thearg;
+    }
+    else {
+        return PyObject_Call((PyObject*)&wf_type, args, nullptr);
+    }
 }
 
 /*
