@@ -826,7 +826,7 @@ namespace yapyjit {
 				auto visit = new_temp_var(appender);
 				auto idx = new_temp_var(appender);
 				appender.new_insn(new ConstantIns(
-					idx, ManagedPyo(PyLong_FromLong(i), true)
+					idx, ManagedPyo(PyLong_FromSize_t(i), true)
 				));
 				appender.new_insn(new LoadItemIns(
 					idx, visit, src

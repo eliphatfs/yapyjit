@@ -32,6 +32,12 @@ template<> struct SizedMIRInt<2> : _const_mir_ty<MIR_T_I16> {};
 template<> struct SizedMIRInt<4> : _const_mir_ty<MIR_T_I32> {};
 template<> struct SizedMIRInt<8> : _const_mir_ty<MIR_T_I64> {};
 
+template<int size> struct SizedMIRUint;
+template<> struct SizedMIRUint<1> : _const_mir_ty<MIR_T_U8> {};
+template<> struct SizedMIRUint<2> : _const_mir_ty<MIR_T_U16> {};
+template<> struct SizedMIRUint<4> : _const_mir_ty<MIR_T_U32> {};
+template<> struct SizedMIRUint<8> : _const_mir_ty<MIR_T_U64> {};
+
 template<int size> struct SizedMIRFloat;
 template<> struct SizedMIRFloat<4> : _const_mir_ty<MIR_T_F> {};
 template<> struct SizedMIRFloat<8> : _const_mir_ty<MIR_T_D> {};
@@ -42,6 +48,7 @@ template<> struct MIRType<short> : SizedMIRInt<sizeof(short)> {};
 template<> struct MIRType<int> : SizedMIRInt<sizeof(int)> {};
 template<> struct MIRType<long> : SizedMIRInt<sizeof(long)> {};
 template<> struct MIRType<long long> : SizedMIRInt<sizeof(long long)> {};
+template<> struct MIRType<size_t> : SizedMIRUint<sizeof(size_t)> {};
 
 template<> struct MIRType<float> : SizedMIRFloat<sizeof(float)> {};
 template<> struct MIRType<double> : SizedMIRFloat<sizeof(double)> {};
