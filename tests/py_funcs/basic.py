@@ -209,15 +209,28 @@ def _kw_call(a, b, c=1, d=2):
     return a, b, c, d
 
 
-def kw_call():
-    return [
-        _kw_call(10, b=20),
-        _kw_call(10, 20, d=30),
-        _kw_call(a=10, b=20, c=30, d=40),
-        _kw_call(a=10, b=20, c=30),
-        _kw_call(a=10, b=20),
-        int('123', base=16)
-    ]
+def kw_call_1():
+    return _kw_call(10, b=20)
+
+
+def kw_call_2():
+    return _kw_call(10, 20, d=30)
+
+
+def kw_call_3():
+    return _kw_call(a=10, b=20, c=30, d=40)
+
+
+def kw_call_4():
+    return _kw_call(a=10, b=20, c=30)
+
+
+def kw_call_5():
+    return _kw_call(a=10, b=20)
+
+
+def kw_call_6():
+    return int('123', base=16)
 
 
 def _global_1(x):
@@ -240,10 +253,8 @@ def _try_catch(f):
     try:
         f(0)
     except ZeroDivisionError as exc:
-        print(1, exc)
         return 1, exc
     except Exception as exc:
-        print(2, exc)
         return 2, exc
     else:
         return 3, None
@@ -257,9 +268,5 @@ def _raise_2(discard):
     raise ValueError("foo")
 
 
-def test_error_init():
-    return ValueError("foo")
-
-
 def try_catch():
-    return _try_catch(_raise_1), _try_catch(_raise_2), _try_catch(_relu)
+    return str([_try_catch(_raise_1), _try_catch(_raise_2), _try_catch(_relu)])
