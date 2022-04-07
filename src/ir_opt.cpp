@@ -204,10 +204,12 @@ namespace yapyjit {
 						break;
 					}
 				}
-				new_instructions.push_back(std::unique_ptr<Instruction>(
-					new JumpTrueFastIns(jt->target, jt->cond)
-				));
-				continue;
+				if (flag) {
+					new_instructions.push_back(std::unique_ptr<Instruction>(
+						new JumpTrueFastIns(jt->target, jt->cond)
+						));
+					continue;
+				}
 			}
 			new_instructions.push_back(std::move(instructions[i]));
 		}

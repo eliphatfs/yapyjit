@@ -28,3 +28,9 @@ def _kwonly(x, /, y, *, z):
 
 def kwonly():
     return _kwonly(0, 2, z=3)
+
+
+def if_cmp_peephole():
+    if 1 and 2 < 3:
+        return 1
+    return -1
