@@ -20,3 +20,11 @@ def destruct_order():
     a = [1, 2]
     a, _ = a
     return a
+
+
+def _kwonly(x, /, y, *, z):
+    return x + y + z
+
+
+def kwonly():
+    return _kwonly(0, 2, z=3)

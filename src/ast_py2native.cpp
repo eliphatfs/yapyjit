@@ -531,7 +531,15 @@ namespace yapyjit {
 				auto name = ast_man.attr("name");
 				result->name = name.to_cstr();
 
+				for (auto arg : ast_man.attr("args").attr("posonlyargs")) {
+					result->args.push_back(arg.attr("arg").to_cstr());
+				}
+
 				for (auto arg : ast_man.attr("args").attr("args")) {
+					result->args.push_back(arg.attr("arg").to_cstr());
+				}
+
+				for (auto arg : ast_man.attr("args").attr("kwonlyargs")) {
 					result->args.push_back(arg.attr("arg").to_cstr());
 				}
 
