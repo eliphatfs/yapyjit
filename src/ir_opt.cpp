@@ -96,6 +96,11 @@ namespace yapyjit {
 				result.use[insn_b->src].push_back(insn_b);
 				break;
 			}
+			case InsnTag::LOADCLOSURE: {
+				auto insn_b = (LoadClosureIns*)insn.get();
+				result.def[insn_b->dst].push_back(insn_b);
+				break;
+			}
 			case InsnTag::LOADGLOBAL: {
 				auto insn_b = (LoadGlobalIns*)insn.get();
 				result.def[insn_b->dst].push_back(insn_b);
@@ -127,6 +132,16 @@ namespace yapyjit {
 			case InsnTag::STOREATTR: {
 				auto insn_b = (StoreAttrIns*)insn.get();
 				result.use[insn_b->dst].push_back(insn_b);
+				result.use[insn_b->src].push_back(insn_b);
+				break;
+			}
+			case InsnTag::STORECLOSURE: {
+				auto insn_b = (StoreClosureIns*)insn.get();
+				result.use[insn_b->src].push_back(insn_b);
+				break;
+			}
+			case InsnTag::STOREGLOBAL: {
+				auto insn_b = (StoreGlobalIns*)insn.get();
 				result.use[insn_b->src].push_back(insn_b);
 				break;
 			}

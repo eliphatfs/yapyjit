@@ -43,12 +43,14 @@ namespace yapyjit {
 		JUMPTRUTHY,
 		LABEL,
 		LOADATTR,
+		LOADCLOSURE,
 		LOADGLOBAL,
 		LOADITEM,
 		MOVE,
 		RAISE,
 		RETURN,
 		STOREATTR,
+		STORECLOSURE,
 		STOREGLOBAL,
 		STOREITEM,
 		UNARYOP,
@@ -359,6 +361,32 @@ namespace yapyjit {
 		virtual void emit(Function* func);
 	};
 
+	class LoadClosureIns : public InsnWithTag<InsnTag::LOADCLOSURE> {
+	public:
+		int dst;
+		std::string name;
+		LoadClosureIns(int dst_local_id, const std::string& name_)
+			: dst(dst_local_id), name(name_) {
+		}
+		virtual std::string pretty_print() {
+			return "ldc $" + std::to_string(dst) + " <- " + name;
+		}
+		virtual void emit(Function* func);
+	};
+
+	class StoreClosureIns : public InsnWithTag<InsnTag::STORECLOSURE> {
+	public:
+		int src;
+		std::string name;
+		StoreClosureIns(int src_local_id, const std::string& name_)
+			: src(src_local_id), name(name_) {
+		}
+		virtual std::string pretty_print() {
+			return "stc " + name + " <- $" + std::to_string(src);
+		}
+		virtual void emit(Function* func);
+	};
+
 	class CallIns : public InsnWithTag<InsnTag::CALL> {
 	public:
 		int dst, func;
@@ -468,7 +496,8 @@ namespace yapyjit {
 		ManagedPyo py_cls;
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
-		std::map<std::string, int> locals;
+		std::map<std::string, int> locals;  // ID is local register index
+		std::map<std::string, int> closure;  // ID is deref ns index
 		std::set<std::string> globals;
 		std::map<std::string, int> slot_offsets;
 		int nargs;

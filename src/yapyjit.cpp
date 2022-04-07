@@ -44,7 +44,7 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
             Py_INCREF(thearg);
             return thearg;
         }
-        else if (Py_TYPE(thearg) == &PyType_Type) {
+        else if (PyObject_IsInstance(thearg, (PyObject*)&PyType_Type)) {
             auto mncls = ManagedPyo(thearg, true);
             for (auto attr : ManagedPyo(PyObject_Dir(thearg))) {
                 auto fn = mncls.attr(attr.to_cstr());

@@ -401,6 +401,26 @@ namespace yapyjit {
 		emit_newown(func->emit_ctx.get(), target);
 	}
 
+	void LoadClosureIns::emit(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		auto target = func->emit_ctx->get_reg(dst);
+		emit_disown(emit_ctx, target);
+		func->emit_ctx->append_insn(MIR_MOV, {
+			target, MIRMemOp(
+				MIR_T_P, MIRRegOp(0),
+				(intptr_t)(func->deref_ns.borrow()) +
+				offsetof(PyTupleObject, ob_item) + func->closure[name] * sizeof(PyObject*)
+			)
+		});
+		func->emit_ctx->append_insn(MIR_MOV, {
+			target, MIRMemOp(
+				MIR_T_P, target,
+				offsetof(PyCellObject, ob_ref)
+			)
+		});
+		emit_newown(emit_ctx, target);
+	}
+
 	void LoadGlobalIns::emit(Function* func) {
 		auto emit_ctx = func->emit_ctx.get();
 		auto target = func->emit_ctx->get_reg(dst);
@@ -431,6 +451,10 @@ namespace yapyjit {
 		}
 		emit_error_check(func, target);
 		emit_newown(emit_ctx, target);
+	}
+
+	void StoreClosureIns::emit(Function* func) {
+		throw std::runtime_error("Assigning closure vars are not yet supported");
 	}
 
 	void StoreGlobalIns::emit(Function* func) {

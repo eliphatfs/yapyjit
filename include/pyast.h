@@ -349,7 +349,10 @@ namespace yapyjit {
 			const auto ins_pair = appender.locals.insert(
 				{ identifier, (int)appender.locals.size() + 1 }
 			);
-			if (ins_pair.second) {
+			if (appender.closure.count(identifier)) {
+				appender.new_insn(new LoadClosureIns(ins_pair.first->second, identifier));
+			}
+			else if (ins_pair.second) {
 				// Not exist, assume global
 				appender.globals.insert(identifier);
 			}
@@ -753,6 +756,12 @@ namespace yapyjit {
 			for (size_t i = 0; i < args.size(); i++) {
 				appender->locals[args[i]] = (int)i + 1;
 			}
+			if (!(deref_ns == Py_None)) {
+				int idx = 0;
+				for (const auto& closurevar : pyfunc.attr("__code__").attr("co_freevars")) {
+					appender->closure[closurevar.to_cstr()] = idx++;
+				}
+			}
 			for (auto& stmt : body_stmts) {
 				stmt->emit_ir(*appender);
 			}
@@ -801,7 +810,10 @@ namespace yapyjit {
 				{ id, (int)appender.locals.size() + 1 }
 			).first;  // second is success
 			appender.new_insn(new MoveIns(vid->second, src));
-			if (appender.globals.count(id)) {
+			if (appender.closure.count(id)) {
+				appender.new_insn(new StoreClosureIns(vid->second, id));
+			}
+			else if (appender.globals.count(id)) {
 				appender.new_insn(new StoreGlobalIns(vid->second, id));
 			}
 			break;
