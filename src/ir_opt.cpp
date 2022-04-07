@@ -79,6 +79,14 @@ namespace yapyjit {
 				result.use[insn_b->dst].push_back(insn_b);
 				break;
 			}
+			case InsnTag::DESTRUCT: {
+				auto insn_b = (DestructIns*)insn.get();
+				result.use[insn_b->src].push_back(insn_b);
+				for (auto dst : insn_b->dests) {
+					result.def[dst].push_back(insn_b);
+				}
+				break;
+			}
 			case InsnTag::ITERNEXT: {
 				auto insn_b = (IterNextIns*)insn.get();
 				result.def[insn_b->dst].push_back(insn_b);

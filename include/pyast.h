@@ -848,21 +848,13 @@ namespace yapyjit {
 			);
 		}
 		if (destruct_targets != nullptr) {
-			// TODO: optimize by stashing all elm into mem first
-			auto source_cpy = new_temp_var(appender);
-			appender.new_insn(new MoveIns(
-				source_cpy, src
-			));
+			auto destruction = new DestructIns(src);
 			for (size_t i = 0; i < destruct_targets->size(); i++) {
-				auto visit = new_temp_var(appender);
-				auto idx = new_temp_var(appender);
-				appender.new_insn(new ConstantIns(
-					idx, ManagedPyo(PyLong_FromSize_t(i), true)
-				));
-				appender.new_insn(new LoadItemIns(
-					idx, visit, source_cpy
-				));
-				assn_ir(appender, destruct_targets->at(i).get(), visit);
+				destruction->dests.push_back(new_temp_var(appender));
+			}
+			appender.new_insn(destruction);
+			for (size_t i = 0; i < destruct_targets->size(); i++) {
+				assn_ir(appender, destruct_targets->at(i).get(), destruction->dests[i]);
 			}
 		}
 	}

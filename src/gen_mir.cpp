@@ -392,6 +392,41 @@ namespace yapyjit {
 			break;
 		}
 	}
+	
+	void DestructIns::emit(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		auto source = emit_ctx->get_reg(src);
+		auto cvt = emit_ctx->new_temp_reg(MIR_T_I64);
+		emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
+			(int64_t)PySequence_Fast,
+			cvt, source, (intptr_t)"destruct target is not iterable"
+		});
+		auto base = emit_ctx->new_temp_reg(MIR_T_I64);
+		emit_ctx->append_insn(MIR_ADD, {
+			base, cvt, offsetof(PyTupleObject, ob_item)
+		});
+		auto skip_lab = emit_ctx->new_label();
+		emit_ctx->append_insn(MIR_BNE, {
+			skip_lab, (intptr_t)&PyList_Type,
+			MIRMemOp(MIR_T_P, cvt, offsetof(PyObject, ob_type))
+		});
+		emit_ctx->append_insn(MIR_MOV, {
+			base, MIRMemOp(MIR_T_P, base, 0)
+		});
+		emit_ctx->append_label(skip_lab);
+		for (size_t i = 0; i < dests.size(); i++) {
+			auto dst = emit_ctx->get_reg(dests[i]);
+			emit_ctx->append_insn(MIR_MOV, {
+				dst, MIRMemOp(MIR_T_P, base, i * sizeof(PyObject*))
+			});
+		}
+		for (size_t i = 0; i < dests.size(); i++) {
+			auto dst = emit_ctx->get_reg(dests[i]);
+			emit_newown(emit_ctx, dst);
+		}
+		emit_disown(emit_ctx, cvt);
+	}
 
 	void ConstantIns::emit(Function* func) {
 		auto target = func->emit_ctx->get_reg(dst);

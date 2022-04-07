@@ -36,6 +36,7 @@ namespace yapyjit {
 		CONSTANT,
 		DELATTR,
 		DELITEM,
+		DESTRUCT,
 		ERRORPROP,
 		CLEARERRORCTX,
 		ITERNEXT,
@@ -318,6 +319,23 @@ namespace yapyjit {
 				res += "$" + std::to_string(args[i]);
 			}
 			return res + ")";
+		}
+		virtual void emit(Function* func);
+	};
+
+	class DestructIns : public InsnWithTag<InsnTag::DESTRUCT> {
+	public:
+		int src;
+		std::vector<int> dests;
+		DestructIns(int src_local_id) : src(src_local_id) {
+		}
+		virtual std::string pretty_print() {
+			std::string res = "destruct (";
+			for (size_t i = 0; i < dests.size(); i++) {
+				if (i != 0) res += ", ";
+				res += "$" + std::to_string(dests[i]);
+			}
+			return res + ")" + " <- $" + std::to_string(src);
 		}
 		virtual void emit(Function* func);
 	};
