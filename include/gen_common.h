@@ -33,9 +33,8 @@ namespace yapyjit {
 		auto rc_pos = MIRMemOp(SizedMIRInt<sizeof(Py_None->ob_refcnt)>::t, op, offsetof(PyObject, ob_refcnt));
 		auto skip = emit_jump_if_not(func, op);
 		func->append_insn(MIR_SUB, { rc_pos, rc_pos, 1 });
-		auto skip_dealloc = emit_jump_if(func, rc_pos);
+		func->append_insn(MIR_BT, { skip, rc_pos });
 		emit_1pyo_call_void(func, (int64_t)_Py_Dealloc, op);
-		func->append_label(skip_dealloc);
 		func->append_label(skip);
 		func->append_insn(MIR_MOV, { op, 0 });
 	}
