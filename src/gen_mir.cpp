@@ -176,6 +176,12 @@ namespace yapyjit {
 		});
 		func->emit_ctx->append_insn(MIR_BT, { ensure_label(func, target), ret });
 	}
+	void JumpTrueFastIns::emit(Function* func) {
+		func->emit_ctx->append_insn(MIR_BEQ, {
+			ensure_label(func, target), func->emit_ctx->get_reg(cond),
+			(intptr_t)Py_True
+		});
+	}
 
 	void StoreAttrIns::emit(Function* func) {
 		auto emit_ctx = func->emit_ctx.get();

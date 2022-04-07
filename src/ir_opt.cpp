@@ -195,6 +195,20 @@ namespace yapyjit {
 					continue;
 				}
 			}
+			else if (instructions[i]->tag() == +InsnTag::JUMPTRUTHY) {
+				auto jt = (JumpTruthyIns*)instructions[i].get();
+				auto flag = true;
+				for (auto use : defuse.use[jt->cond]) {
+					if (use->tag() != +InsnTag::COMPARE) {
+						flag = false;
+						break;
+					}
+				}
+				new_instructions.push_back(std::unique_ptr<Instruction>(
+					new JumpTrueFastIns(jt->target, jt->cond)
+				));
+				continue;
+			}
 			new_instructions.push_back(std::move(instructions[i]));
 		}
 		if (i < instructions.size())

@@ -58,6 +58,7 @@ namespace yapyjit {
 		// C_ insns will not exist before combining insns/peephole opt
 		// We do not need to include these in analysis
 		C_CALLMTHD,
+		C_JUMPTRUEFAST,
 		// V_ virtual/special insns
 		V_SETERRLAB,
 		V_EPILOG
@@ -199,6 +200,18 @@ namespace yapyjit {
 			: target(target_), cond(cond_local_id) {}
 		virtual std::string pretty_print() {
 			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
+		}
+		virtual void emit(Function* func);
+	};
+
+	class JumpTrueFastIns : public InsnWithTag<InsnTag::C_JUMPTRUEFAST> {
+	public:
+		LabelIns* target;
+		int cond;
+		JumpTrueFastIns(LabelIns* target_, int cond_local_id)
+			: target(target_), cond(cond_local_id) {}
+		virtual std::string pretty_print() {
+			return "jt.bool " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
 		virtual void emit(Function* func);
 	};
