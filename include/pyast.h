@@ -739,16 +739,17 @@ namespace yapyjit {
 
 	class FuncDef : public ASTWithTag<ASTTag::FUNCDEF> {
 	public:
-		ManagedPyo global_ns;
 		std::string name;
 		std::vector<std::string> args;
 		std::vector<std::unique_ptr<AST>> body_stmts;
-		FuncDef(ManagedPyo global_ns_): global_ns(global_ns_) {}
+		FuncDef() {}
 		virtual int emit_ir(Function& appender) {
 			throw std::logic_error("Nested functions are not supported yet");
 		}
-		std::unique_ptr<Function> emit_ir_f() {
-			auto appender = std::make_unique<Function>(global_ns, name, static_cast<int>(args.size()));
+		std::unique_ptr<Function> emit_ir_f(ManagedPyo pyfunc) {
+			auto global_ns = pyfunc.attr("__globals__");
+			auto deref_ns = pyfunc.attr("__closure__");
+			auto appender = std::make_unique<Function>(global_ns, deref_ns, name, static_cast<int>(args.size()));
 			for (size_t i = 0; i < args.size(); i++) {
 				appender->locals[args[i]] = (int)i + 1;
 			}
@@ -763,7 +764,7 @@ namespace yapyjit {
 			ret_none_default.emit_ir(*appender);
 			appender->new_insn(new EpilogueIns());
 
-			Function prelude = Function(global_ns, name, 0);
+			Function prelude = Function(global_ns, deref_ns, name, 0);
 			for (const auto& glob : appender->globals) {
 				prelude.new_insn(new LoadGlobalIns(
 					appender->locals[glob], glob

@@ -49,10 +49,10 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
 
         auto inspect_mod = yapyjit::ManagedPyo(PyImport_ImportModule("inspect"));
 
-        auto closure = inspect_mod.attr("getclosurevars").call(pyfunc);
+        /*auto closure = inspect_mod.attr("getclosurevars").call(pyfunc);
         if (PyObject_IsTrue(closure.attr("nonlocals").borrow())) {
             throw std::invalid_argument(std::string("closure vars are not supported yet."));
-        }
+        }*/
 
         auto spec = inspect_mod.attr("getfullargspec").call(pyfunc);
         if (spec.attr("varargs") == Py_None && spec.attr("varkw") == Py_None) {
@@ -83,7 +83,7 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
         else {
             throw std::invalid_argument(std::string("varargs and varkw funcs are not supported yet."));
         }
-        self->compiled = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc));
+        self->compiled = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc), yapyjit::ManagedPyo(pyfunc, true));
         if (pyclass && pyclass != Py_None)
             self->compiled->py_cls = yapyjit::ManagedPyo(pyclass, true);
         self->generated = yapyjit::generate_mir(*self->compiled);

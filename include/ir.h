@@ -464,7 +464,7 @@ namespace yapyjit {
 	};
 	class Function {
 	public:
-		ManagedPyo globals_ns;
+		ManagedPyo globals_ns, deref_ns;
 		ManagedPyo py_cls;
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
@@ -484,8 +484,9 @@ namespace yapyjit {
 		MIRLabelOp epilogue_label;
 		MIRRegOp return_reg;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
-		Function(ManagedPyo globals_ns_, std::string name_, int nargs_) :
-			globals_ns(globals_ns_), py_cls(Py_None, true), name(name_), nargs(nargs_),
+		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
+			globals_ns(globals_ns_), deref_ns(deref_ns_),
+			py_cls(Py_None, true), name(name_), nargs(nargs_),
 			return_reg(0), epilogue_label(nullptr), error_label(nullptr) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.

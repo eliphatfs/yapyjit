@@ -20,7 +20,7 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
         return NULL;
     }
 
-    auto ir = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc));
+    auto ir = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc), ManagedPyo(pyfunc, true));
     
     std::stringstream ss;
     for (auto& insn : ir->instructions) {
@@ -32,7 +32,7 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
 
 PyDoc_STRVAR(yapyjit_jit_doc, "jit(obj)\
 \
-Jit compiles a python function.");
+Jit compiles a python function or class (and all member methods in it).");
 
 PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
     PyObject* thearg = nullptr;
@@ -54,8 +54,10 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
                     Py_INCREF(thearg);
                     PyTuple_SET_ITEM(argtuple, 1, thearg);
                     auto obj = PyObject_Call((PyObject*)&wf_type, argtuple, nullptr);
-                    if (!obj)
+                    if (!obj) {
+                        PyErr_Clear();  // TODO: warning flags
                         continue;
+                    }
                     mncls.attr(
                         attr.to_cstr(), obj
                     );
