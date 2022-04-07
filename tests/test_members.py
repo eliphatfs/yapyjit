@@ -26,6 +26,19 @@ class A:
 
 
 @yapyjit.jit
+class SlottedMember:
+    __slots__ = ("x", "y")
+
+    def __init__(self):
+        self.x = 1
+        self.y = 2
+
+    def test(self):
+        self.x += 1
+        return self.x, self.y
+
+
+@yapyjit.jit
 def attribute_tester(x):
     return x
 
@@ -56,6 +69,12 @@ class TestMembers(unittest.TestCase):
 
     def test_static_method(self):
         self.assertEqual(A.staticmthd(), "static")
+
+    def test_slotted_member(self):
+        inst = SlottedMember()
+        for i in range(1000):
+            self.assertEqual(inst.test(), (i * 2 + 2, 2))
+            inst.x += 1
 
 
 if __name__ == "__main__":
