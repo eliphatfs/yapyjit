@@ -37,7 +37,7 @@ namespace yapyjit {
 			}
 		}
 	}
-	void collect_comprehension_binds(std::vector<ManagedPyo>& names, ManagedPyo target) {
+	void collect_comprehension_binds(std::vector<ManagedPyo>& names, ManagedPyo target, short mode) {
 		switch (simple_hash(target.type().attr("__name__").to_cstr())) {
 			TARGET(Name) {
 				names.push_back(target.attr("id"));
@@ -45,14 +45,23 @@ namespace yapyjit {
 			}
 			TARGET(List)
 			TARGET(Tuple) {
-				for (auto sub : target.attr("elts")) {
-					collect_comprehension_binds(names, sub);
+				if (mode == 0)
+					for (auto sub : target.attr("elts")) {
+						collect_comprehension_binds(names, sub, mode);
+					}
+				else {
+					for (auto sub : target.attr("key")) {
+						collect_comprehension_binds(names, sub, mode);
+					}
+					for (auto sub : target.attr("value")) {
+						collect_comprehension_binds(names, sub, mode);
+					}
 				}
 				break;
 			}
 		}
 	}
-	std::unique_ptr<AST> lower_comprehension(ManagedPyo ast_man, ManagedPyo init_callable, ManagedPyo add_callable) {
+	std::unique_ptr<AST> lower_comprehension(ManagedPyo ast_man, ManagedPyo init_callable, ManagedPyo add_callable, short mode = 0) {
 		auto result = std::make_unique<ValueBlock>();
 		auto init_fn = new Constant(init_callable);
 		auto comp_name = std::string("_yapyjit_comp_r_") + std::to_string((intptr_t)ast_man.borrow());
@@ -62,11 +71,16 @@ namespace yapyjit {
 		));
 		std::vector<ManagedPyo> names;
 		for (auto gen : ast_man.attr("generators")) {
-			collect_comprehension_binds(names, gen.attr("target"));
+			collect_comprehension_binds(names, gen.attr("target"), mode);
 		}
 		for (auto old_name : names) {
 			auto new_name = ManagedPyo::from_str("_yapyjit_comp_").attr("__add__").call(old_name.borrow());
-			recursive_var_replacement(ast_man.attr("elt"), old_name, new_name);
+			if (mode == 0)
+				recursive_var_replacement(ast_man.attr("elt"), old_name, new_name);
+			else {
+				recursive_var_replacement(ast_man.attr("key"), old_name, new_name);
+				recursive_var_replacement(ast_man.attr("value"), old_name, new_name);
+			}
 			bool first = true;
 			for (auto gen : ast_man.attr("generators")) {
 				recursive_var_replacement(gen.attr("target"), old_name, new_name);
@@ -81,7 +95,12 @@ namespace yapyjit {
 		}
 		std::vector<std::unique_ptr<AST>> args_add;
 		args_add.push_back(std::unique_ptr<AST>(new Name(comp_name)));
-		args_add.push_back(ast_py2native(ast_man.attr("elt")));
+		if (mode == 0)
+			args_add.push_back(ast_py2native(ast_man.attr("elt")));
+		else {
+			args_add.push_back(ast_py2native(ast_man.attr("key")));
+			args_add.push_back(ast_py2native(ast_man.attr("value")));
+		}
 		AST* current = new Call(
 			std::unique_ptr<AST>(new Constant(add_callable)), args_add
 		);
@@ -204,17 +223,9 @@ namespace yapyjit {
 				return lower_comprehension(ast_man, init_callable, add_callable);
 			}
 			TARGET(DictComp) {
-				auto ast_mod = ManagedPyo(PyImport_ImportModule("ast"));
-				auto fill = ManagedPyo(PyList_New(2));
-				PyList_SetItem(fill.borrow(), 0, ast_man.attr("key").borrow());
-				PyList_SetItem(fill.borrow(), 1, ast_man.attr("value").borrow());
-				auto fill_elt = ast_mod.attr("Tuple").call(fill.borrow(), ast_mod.attr("Load").call().borrow());
-				auto ast_conv = ast_mod.attr("ListComp").call(fill_elt.borrow(), ast_man.attr("generators").borrow());
-				auto built = ast_py2native(ast_conv);
-				return std::make_unique<Call>(
-					std::unique_ptr<AST>(new Constant(ManagedPyo((PyObject*)&PyDict_Type, true))),
-					std::move(built)
-				);
+				ManagedPyo init_callable((PyObject*)&PyDict_Type, true);
+				ManagedPyo add_callable = init_callable.attr("__setitem__");
+				return lower_comprehension(ast_man, init_callable, add_callable, 1);
 			}
 			TARGET(Compare) {
 				std::vector<OpCmp> ops{};
