@@ -540,14 +540,16 @@ namespace yapyjit {
 		std::unique_ptr<MIRFunction> emit_ctx;
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
-		MIRLabelOp error_label;
-		MIRLabelOp epilogue_label;
 		MIRRegOp return_reg;
+		MIRLabelOp epilogue_label;
+		MIRLabelOp error_label;
+		bool tracing_enabled_p;
 		std::map<LabelIns*, MIRLabelOp> emit_label_map;
 		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
 			globals_ns(globals_ns_), deref_ns(deref_ns_),
 			py_cls(Py_None, true), name(name_), nargs(nargs_),
-			return_reg(0), epilogue_label(nullptr), error_label(nullptr) {}
+			return_reg(0), epilogue_label(nullptr), error_label(nullptr),
+			tracing_enabled_p(false) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.
 		void new_insn(Instruction * insn) {

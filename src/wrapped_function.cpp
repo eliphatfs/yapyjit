@@ -10,9 +10,9 @@ wf_dealloc(WrappedFunctionObject* self)
 {
     Py_CLEAR(self->wrapped);
     self->compiled.reset(nullptr);
-    delete self->argidlookup;
+    delete self->argid_lookup;
     delete self->defaults;
-    delete self->callfill;
+    delete self->call_args_fill;
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -26,10 +26,12 @@ wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
         self->wrapped = Py_None;
         self->compiled = nullptr;
         self->generated = nullptr;
-        self->argidlookup = new std::map<std::string, int>();
+        self->argid_lookup = new std::map<std::string, int>();
         self->defaults = new std::vector<PyObject*>();
-        self->callfill = new std::vector<PyObject*>();
-        self->callableimpl = (vectorcallfunc)wf_fastcall;
+        self->call_args_fill = new std::vector<PyObject*>();
+        self->call_args_type_traces = nullptr;
+        self->callable_impl = (vectorcallfunc)wf_fastcall;
+        self->call_count = 0;
     }
     return (PyObject*)self;
 }
@@ -57,7 +59,7 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
         auto spec = inspect_mod.attr("getfullargspec").call(pyfunc);
         if (spec.attr("varargs") == Py_None && spec.attr("varkw") == Py_None) {
             for (auto arg : spec.attr("args")) {
-                (*self->argidlookup)[arg.to_cstr()] = self->defaults->size();
+                (*self->argid_lookup)[arg.to_cstr()] = self->defaults->size();
                 self->defaults->push_back(nullptr);
             }
             if (!(spec.attr("defaults") == Py_None)) {
@@ -67,7 +69,7 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
                 }
             }
             for (auto arg : spec.attr("kwonlyargs")) {
-                (*self->argidlookup)[arg.to_cstr()] = self->defaults->size();
+                (*self->argid_lookup)[arg.to_cstr()] = self->defaults->size();
                 self->defaults->push_back(nullptr);
             }
             PyObject* key, * value;
@@ -77,8 +79,13 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
                 while (PyDict_Next(kwonlydef.borrow(), &pos, &key, &value)) {
                     assert(PyUnicode_CheckExact(key));
                     auto name = PyUnicode_AsUTF8(key);
-                    (*self->defaults)[self->argidlookup->at(name)] = value;
+                    (*self->defaults)[self->argid_lookup->at(name)] = value;
                 }
+            if (self->call_args_type_traces)
+                delete self->call_args_type_traces;
+            self->call_args_type_traces = new std::vector<TypeTraceEntry>(
+                self->defaults->size(), TypeTraceEntry()
+            );
         }
         else {
             throw std::invalid_argument(std::string("varargs and varkw funcs are not supported yet."));
@@ -86,6 +93,7 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
         self->compiled = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc), yapyjit::ManagedPyo(pyfunc, true));
         if (pyclass && pyclass != Py_None)
             self->compiled->py_cls = yapyjit::ManagedPyo(pyclass, true);
+        self->compiled->tracing_enabled_p = true;
         self->generated = yapyjit::generate_mir(*self->compiled);
     }
     return 0;
@@ -139,20 +147,41 @@ wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, P
     Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
     auto callargs = args;
     auto posargs = PyVectorcall_NARGS(nargsf);
+    ++self->call_count;
+    if (self->call_count >= 8 && self->compiled->tracing_enabled_p) {
+        // TODO: issue re-compiling on background thread
+        // If traced info allows opt, recompile with that
+        // Otherwise, turn off tracing and recompile
+        /*PyObject_Print(self->wrapped, stdout, 0);
+        PyObject_Print(PyUnicode_FromString("\n"), stdout, Py_PRINT_RAW);
+        for (auto& tytrace : *self->call_args_type_traces) {
+            for (int i = 0; i < N_TYPE_TRACE_ENTRY; i++)
+                PyObject_Print((PyObject*)tytrace.types[i], stdout, 0);
+            PyObject_Print(PyUnicode_FromString("\n"), stdout, Py_PRINT_RAW);
+        }*/
+        self->compiled->tracing_enabled_p = false;
+    }
     if (kwnames || posargs < nargs) {
-        self->callfill->clear();
+        self->call_args_fill->clear();
         for (Py_ssize_t i = 0; i < posargs; i++) {
-            self->callfill->push_back(args[i]);
+            self->call_args_fill->push_back(args[i]);
         }
         for (Py_ssize_t i = posargs; i < nargs; i++) {
-            self->callfill->push_back(self->defaults->at(i));
+            self->call_args_fill->push_back(self->defaults->at(i));
         }
-        callargs = self->callfill->data();
+        callargs = self->call_args_fill->data();
     }
     if (kwnames) {
         for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(kwnames); i++) {
             auto name = PyUnicode_AsUTF8(PyTuple_GET_ITEM(kwnames, i));
-            (*self->callfill)[self->argidlookup->at(name)] = args[posargs + i];
+            (*self->call_args_fill)[self->argid_lookup->at(name)] = args[posargs + i];
+        }
+    }
+    if (self->compiled->tracing_enabled_p) {
+        for (Py_ssize_t i = 0; i < nargs; i++) {
+            update_type_trace_entry(
+                self->call_args_type_traces->data() + i, Py_TYPE(callargs[i])
+            );
         }
     }
     auto result = ((_yapyjit_fastercall)(self->generated->addr))(self, callargs);
@@ -170,10 +199,10 @@ int yapyjit::initialize_wf(PyObject* m) {
     wf_type.tp_init = (initproc)yapyjit::guarded<wf_init>();
     wf_type.tp_dealloc = (destructor)wf_dealloc;
     wf_type.tp_members = wf_members;
-    wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extattrdict);
+    wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extra_attrdict);
     wf_type.tp_methods = wf_methods;
     wf_type.tp_call = PyVectorcall_Call;
-    wf_type.tp_vectorcall_offset = offsetof(WrappedFunctionObject, callableimpl);
+    wf_type.tp_vectorcall_offset = offsetof(WrappedFunctionObject, callable_impl);
     wf_type.tp_descr_get = wf_descr_get;
 
     if (PyType_Ready(&wf_type) < 0)

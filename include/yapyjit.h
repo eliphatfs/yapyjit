@@ -40,16 +40,30 @@ namespace yapyjit {
     }
 }
 
+#define N_TYPE_TRACE_ENTRY 5
+typedef struct {
+    PyTypeObject* types[N_TYPE_TRACE_ENTRY];
+    int idx;  // round-robin
+} TypeTraceEntry;
+
+inline void update_type_trace_entry(TypeTraceEntry* entry, PyTypeObject* ty) {
+    entry->types[entry->idx++] = ty;
+    if (entry->idx >= N_TYPE_TRACE_ENTRY)
+        entry->idx = 0;
+}
+
 typedef struct {
     PyObject_HEAD
-        PyObject* wrapped;
+    PyObject* wrapped;
     std::unique_ptr<yapyjit::Function> compiled;
     MIR_item_t generated;
-    std::map<std::string, int>* argidlookup;
+    std::map<std::string, int>* argid_lookup;
     std::vector<PyObject*>* defaults;
-    std::vector<PyObject*>* callfill;
-    vectorcallfunc callableimpl;
-    PyObject* extattrdict;
+    std::vector<PyObject*>* call_args_fill;
+    std::vector<TypeTraceEntry>* call_args_type_traces;
+    vectorcallfunc callable_impl;
+    PyObject* extra_attrdict;
+    int call_count;
 } WrappedFunctionObject;
 
 extern PyTypeObject wf_type;
