@@ -1,12 +1,13 @@
 #include <yapyjit.h>
+#include <pybind_jitted_func.h>
 #include <ir.h>
 #include "structmember.h"
 
 static PyObject*
-wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames);
+wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames);
 
 static void
-wf_dealloc(WrappedFunctionObject* self)
+wf_dealloc(JittedFuncObject* self)
 {
     Py_CLEAR(self->wrapped);
     self->compiled.reset(nullptr);
@@ -19,8 +20,8 @@ wf_dealloc(WrappedFunctionObject* self)
 static PyObject*
 wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
 {
-    WrappedFunctionObject* self;
-    self = (WrappedFunctionObject*)type->tp_alloc(type, 0);
+    JittedFuncObject* self;
+    self = (JittedFuncObject*)type->tp_alloc(type, 0);
     if (self != NULL) {
         Py_INCREF(Py_None);
         self->wrapped = Py_None;
@@ -37,7 +38,7 @@ wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
 }
 
 static int
-wf_init(WrappedFunctionObject* self, PyObject* args)
+wf_init(JittedFuncObject* self, PyObject* args)
 {
     PyObject* pyfunc = NULL, *pyclass = NULL;
     if (!PyArg_ParseTuple(args, "OO", &pyfunc, &pyclass)) {
@@ -100,7 +101,7 @@ wf_init(WrappedFunctionObject* self, PyObject* args)
 }
 
 static PyMemberDef wf_members[] = {
-    {"wrapped", T_OBJECT_EX, offsetof(WrappedFunctionObject, wrapped), 0, "wrapped python function"},
+    {"wrapped", T_OBJECT_EX, offsetof(JittedFuncObject, wrapped), 0, "wrapped python function"},
     {NULL}
 };
 
@@ -114,7 +115,7 @@ wf_descr_get(PyObject* self, PyObject* obj, PyObject* type) {
 }
 
 static PyObject*
-wf_mir(WrappedFunctionObject* self, PyObject* args) {
+wf_mir(JittedFuncObject* self, PyObject* args) {
     const char* fp_parsed;
     if (!PyArg_ParseTuple(args, "s", &fp_parsed)) {
         return nullptr;
@@ -136,14 +137,14 @@ static PyMethodDef wf_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-PyTypeObject wf_type = {
+PyTypeObject JittedFuncType = {
     PyVarObject_HEAD_INIT(NULL, 0)
 };
 
-typedef PyObject* (*_yapyjit_fastercall) (WrappedFunctionObject*, PyObject* const*);
+typedef PyObject* (*_yapyjit_fastercall) (JittedFuncObject*, PyObject* const*);
 
 static PyObject*
-wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
+wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
     Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
     auto callargs = args;
     auto posargs = PyVectorcall_NARGS(nargsf);
@@ -188,29 +189,29 @@ wf_fastcall(WrappedFunctionObject* self, PyObject* const* args, size_t nargsf, P
     return result;
 }
 
-int yapyjit::initialize_wf(PyObject* m) {
-    wf_type.tp_name = "yapyjit.JittedFunc";
-    wf_type.tp_doc = "Jitted functions";
-    wf_type.tp_basicsize = sizeof(WrappedFunctionObject);
-    wf_type.tp_itemsize = 0;
-    wf_type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_METHOD_DESCRIPTOR | _Py_TPFLAGS_HAVE_VECTORCALL;
+int yapyjit::init_pybind_jitted_func(PyObject* m) {
+    JittedFuncType.tp_name = "yapyjit.JittedFunc";
+    JittedFuncType.tp_doc = "Jitted functions";
+    JittedFuncType.tp_basicsize = sizeof(JittedFuncObject);
+    JittedFuncType.tp_itemsize = 0;
+    JittedFuncType.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_METHOD_DESCRIPTOR | _Py_TPFLAGS_HAVE_VECTORCALL;
 
-    wf_type.tp_new = wf_new;
-    wf_type.tp_init = (initproc)yapyjit::guarded<wf_init>();
-    wf_type.tp_dealloc = (destructor)wf_dealloc;
-    wf_type.tp_members = wf_members;
-    wf_type.tp_dictoffset = offsetof(WrappedFunctionObject, extra_attrdict);
-    wf_type.tp_methods = wf_methods;
-    wf_type.tp_call = PyVectorcall_Call;
-    wf_type.tp_vectorcall_offset = offsetof(WrappedFunctionObject, callable_impl);
-    wf_type.tp_descr_get = wf_descr_get;
+    JittedFuncType.tp_new = wf_new;
+    JittedFuncType.tp_init = (initproc)yapyjit::guarded<wf_init>();
+    JittedFuncType.tp_dealloc = (destructor)wf_dealloc;
+    JittedFuncType.tp_members = wf_members;
+    JittedFuncType.tp_dictoffset = offsetof(JittedFuncObject, extra_attrdict);
+    JittedFuncType.tp_methods = wf_methods;
+    JittedFuncType.tp_call = PyVectorcall_Call;
+    JittedFuncType.tp_vectorcall_offset = offsetof(JittedFuncObject, callable_impl);
+    JittedFuncType.tp_descr_get = wf_descr_get;
 
-    if (PyType_Ready(&wf_type) < 0)
+    if (PyType_Ready(&JittedFuncType) < 0)
         return -1;
 
-    Py_INCREF(&wf_type);
-    if (PyModule_AddObject(m, "JittedFunc", (PyObject*)&wf_type) < 0) {
-        Py_DECREF(&wf_type);
+    Py_INCREF(&JittedFuncType);
+    if (PyModule_AddObject(m, "JittedFunc", (PyObject*)&JittedFuncType) < 0) {
+        Py_DECREF(&JittedFuncType);
         return -1;
     }
     return 0;

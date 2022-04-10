@@ -4,6 +4,7 @@
 #include <yapyjit.h>
 #include <exc_conv.h>
 #include <pyast.h>
+#include <pybind_jitted_func.h>
 using namespace yapyjit;
 
 
@@ -40,7 +41,7 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
         return nullptr;
     }
     if (thearg) {
-        if (Py_TYPE(thearg) == &wf_type) {
+        if (Py_TYPE(thearg) == &JittedFuncType) {
             Py_INCREF(thearg);
             return thearg;
         }
@@ -53,7 +54,7 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
                     PyTuple_SET_ITEM(argtuple, 0, fn.transfer());
                     Py_INCREF(thearg);
                     PyTuple_SET_ITEM(argtuple, 1, thearg);
-                    auto obj = PyObject_Call((PyObject*)&wf_type, argtuple, nullptr);
+                    auto obj = PyObject_Call((PyObject*)&JittedFuncType, argtuple, nullptr);
                     if (!obj) {
                         PyErr_Clear();  // TODO: warning flags
                         continue;
@@ -73,7 +74,7 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
             PyTuple_SET_ITEM(argtuple, 0, thearg);
             Py_INCREF(Py_None);
             PyTuple_SET_ITEM(argtuple, 1, Py_None);
-            auto result = PyObject_Call((PyObject*)&wf_type, argtuple, nullptr);
+            auto result = PyObject_Call((PyObject*)&JittedFuncType, argtuple, nullptr);
             Py_DECREF(argtuple);
             return result;
         }
@@ -102,7 +103,7 @@ int exec_yapyjit(PyObject *module) {
     PyModule_AddStringConstant(module, "__version__", "0.0.1a1");
     PyModule_AddIntConstant(module, "year", 2022);
 
-    if (yapyjit::initialize_wf(module)) {
+    if (yapyjit::init_pybind_jitted_func(module)) {
         return -1;
     }
     return 0; /* success */

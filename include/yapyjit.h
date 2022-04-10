@@ -1,7 +1,5 @@
 #pragma once
 #include <memory>
-#include <map>
-#include <vector>
 #include <Python.h>
 #include <mpyo.h>
 #include <pyast.h>
@@ -12,7 +10,6 @@ namespace yapyjit {
     extern MIRContext mir_ctx;
 	extern std::unique_ptr<AST> ast_py2native(ManagedPyo ast);
 	extern MIR_item_t generate_mir(Function& func);
-    extern int initialize_wf(PyObject* m);
 
 	inline ManagedPyo get_py_ast(PyObject* pyfunc) {
         auto locals = ManagedPyo(PyDict_New());
@@ -52,18 +49,3 @@ inline void update_type_trace_entry(TypeTraceEntry* entry, PyTypeObject* ty) {
         entry->idx = 0;
 }
 
-typedef struct {
-    PyObject_HEAD
-    PyObject* wrapped;
-    std::unique_ptr<yapyjit::Function> compiled;
-    MIR_item_t generated;
-    std::map<std::string, int>* argid_lookup;
-    std::vector<PyObject*>* defaults;
-    std::vector<PyObject*>* call_args_fill;
-    std::vector<TypeTraceEntry>* call_args_type_traces;
-    vectorcallfunc callable_impl;
-    PyObject* extra_attrdict;
-    int call_count;
-} WrappedFunctionObject;
-
-extern PyTypeObject wf_type;
