@@ -2,7 +2,7 @@
 #include <memory>
 #include <sstream>
 #include <yapyjit.h>
-#include <exc_conv.h>
+#include <exc_helper.h>
 #include <pyast.h>
 #include <pybind_jitted_func.h>
 using namespace yapyjit;

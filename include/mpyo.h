@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <string>
 #include <Python.h>
-#include <exc_conv.h>
+#include <exc_helper.h>
 // Managed PyObject for convenience.
 
 namespace yapyjit {
