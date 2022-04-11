@@ -198,14 +198,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ast_emit_ir.cpp" />
     <ClCompile Include="ast_py2native.cpp" />
-    <ClCompile Include="gen_mir.cpp" />
+    <ClCompile Include="ir_gen.cpp" />
+    <ClCompile Include="ir_operand_info.cpp" />
     <ClCompile Include="ir_opt.cpp" />
-    <ClCompile Include="wrapped_function.cpp" />
+    <ClCompile Include="ir_recompile.cpp" />
+    <ClCompile Include="pybind_jitted_func.cpp" />
     <ClCompile Include="yapyjit.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\exc_conv.h" />
     <ClInclude Include="..\include\exc_helper.h" />
     <ClInclude Include="..\include\gen_common.h" />
     <ClInclude Include="..\include\gen_icache.h" />
@@ -214,7 +216,11 @@
     <ClInclude Include="..\include\pyast.h" />
     <ClInclude Include="..\include\enum.h" />
     <ClInclude Include="..\include\ir.h" />
+    <ClInclude Include="..\include\pybind_jitted_func.h" />
     <ClInclude Include="..\include\yapyjit.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

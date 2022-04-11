@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="wrapped_function.cpp">
+    <ClCompile Include="pybind_jitted_func.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ir_opt.cpp">
@@ -24,18 +24,24 @@
     <ClCompile Include="ast_py2native.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="gen_mir.cpp">
+    <ClCompile Include="ir_gen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="yapyjit.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ast_emit_ir.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ir_recompile.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ir_operand_info.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\enum.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\exc_conv.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\ir.h">
@@ -62,5 +68,11 @@
     <ClInclude Include="..\include\gen_common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\pybind_jitted_func.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
   </ItemGroup>
 </Project>

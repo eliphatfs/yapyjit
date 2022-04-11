@@ -24,149 +24,23 @@ namespace yapyjit {
 
 	DefUseResult Function::loc_defuse() {
 		DefUseResult result(locals.size() + 1);
+		std::vector<OperandInfo> insn_opinfo;
 		for (auto& insn : instructions) {
-			switch (insn->tag()) {
-			case InsnTag::BINOP: {
-				auto insn_b = (BinOpIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->left].push_back(insn_b);
-				result.use[insn_b->right].push_back(insn_b);
-				break;
-			}
-			case InsnTag::BUILD: {
-				auto insn_b = (BuildIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				for (auto arg : insn_b->args)
-					result.use[arg].push_back(insn_b);
-				break;
-			}
-			case InsnTag::CALL: {
-				auto insn_b = (CallIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->func].push_back(insn_b);
-				for (auto arg : insn_b->args)
-					result.use[arg].push_back(insn_b);
-				for (const auto& kwarg : insn_b->kwargs)
-					result.use[kwarg.second].push_back(insn_b);
-				break;
-			}
-			case InsnTag::CHECKERRORTYPE: {
-				auto insn_b = (CheckErrorTypeIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				if (insn_b->ty != -1)
-					result.use[insn_b->ty].push_back(insn_b);
-				break;
-			}
-			case InsnTag::COMPARE: {
-				auto insn_b = (CompareIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->left].push_back(insn_b);
-				result.use[insn_b->right].push_back(insn_b);
-				break;
-			}
-			case InsnTag::CONSTANT: {
-				auto insn_b = (ConstantIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				break;
-			}
-			case InsnTag::DELATTR: {
-				auto insn_b = (DelAttrIns*)insn.get();
-				result.use[insn_b->dst].push_back(insn_b);
-				break;
-			}
-			case InsnTag::DELITEM: {
-				auto insn_b = (DelItemIns*)insn.get();
-				result.use[insn_b->dst].push_back(insn_b);
-				break;
-			}
-			case InsnTag::DESTRUCT: {
-				auto insn_b = (DestructIns*)insn.get();
-				result.use[insn_b->src].push_back(insn_b);
-				for (auto dst : insn_b->dests) {
-					result.def[dst].push_back(insn_b);
+			insn_opinfo.clear();
+			insn->fill_operand_info(insn_opinfo);
+			for (auto& operand : insn_opinfo) {
+				switch (operand.kind)
+				{
+				case OperandKind::Def:
+					result.def[operand.local].push_back(insn.get());
+					break;
+				case OperandKind::Use:
+					result.use[operand.local].push_back(insn.get());
+					break;
+				default:
+					throw std::runtime_error("Unreachable!");
+					break;
 				}
-				break;
-			}
-			case InsnTag::ITERNEXT: {
-				auto insn_b = (IterNextIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->iter].push_back(insn_b);
-				break;
-			}
-			case InsnTag::JUMPTRUTHY: {
-				auto insn_b = (JumpTruthyIns*)insn.get();
-				result.use[insn_b->cond].push_back(insn_b);
-				break;
-			}
-			case InsnTag::LOADATTR: {
-				auto insn_b = (LoadAttrIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::LOADCLOSURE: {
-				auto insn_b = (LoadClosureIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				break;
-			}
-			case InsnTag::LOADGLOBAL: {
-				auto insn_b = (LoadGlobalIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				break;
-			}
-			case InsnTag::LOADITEM: {
-				auto insn_b = (LoadItemIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::MOVE: {
-				auto insn_b = (MoveIns*)insn.get();
-				result.def[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::RAISE: {
-				auto insn_b = (RaiseIns*)insn.get();
-				if (insn_b->exc != -1)
-					result.use[insn_b->exc].push_back(insn_b);
-				break;
-			}
-			case InsnTag::RETURN: {
-				auto insn_b = (ReturnIns*)insn.get();
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::STOREATTR: {
-				auto insn_b = (StoreAttrIns*)insn.get();
-				result.use[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::STORECLOSURE: {
-				auto insn_b = (StoreClosureIns*)insn.get();
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::STOREGLOBAL: {
-				auto insn_b = (StoreGlobalIns*)insn.get();
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::STOREITEM: {
-				auto insn_b = (StoreItemIns*)insn.get();
-				result.use[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->src].push_back(insn_b);
-				break;
-			}
-			case InsnTag::UNARYOP: {
-				auto insn_b = (UnaryOpIns*)insn.get();
-				result.use[insn_b->dst].push_back(insn_b);
-				result.use[insn_b->operand].push_back(insn_b);
-				break;
-			}
-			default:
-				break;
 			}
 		}
 		return result;
