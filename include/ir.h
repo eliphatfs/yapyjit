@@ -95,6 +95,7 @@ namespace yapyjit {
 		OperandInfo(OperandKind kind_, int val_) : kind(kind_) {
 			if (kind_ == +OperandKind::Def || kind_ == +OperandKind::Use)
 				local = val_;
+			else throw std::runtime_error("OperandInfo ctor: Unreachable!");
 		}
 	};
 

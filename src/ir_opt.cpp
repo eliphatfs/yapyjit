@@ -38,8 +38,7 @@ namespace yapyjit {
 					result.use[operand.local].push_back(insn.get());
 					break;
 				default:
-					throw std::runtime_error("Unreachable!");
-					break;
+					throw std::runtime_error("Function loc_defuse: Unreachable!");
 				}
 			}
 		}
