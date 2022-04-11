@@ -1,3 +1,4 @@
+#include <thread>
 #include <yapyjit.h>
 #include <pybind_jitted_func.h>
 #include <ir.h>
@@ -143,6 +144,10 @@ PyTypeObject JittedFuncType = {
 
 typedef PyObject* (*_yapyjit_fastercall) (JittedFuncObject*, PyObject* const*);
 
+namespace yapyjit {
+    extern std::map<int, int> intra_procedure_type_infer(Function& func, std::map<int, int>* assumption_ptr);
+}
+
 static PyObject*
 wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
     Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
@@ -161,6 +166,30 @@ wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObje
             PyObject_Print(PyUnicode_FromString("\n"), stdout, Py_PRINT_RAW);
         }*/
         self->compiled->tracing_enabled_p = false;
+
+        auto assumptions_ptr = new std::map<int, int>();
+        auto& assumptions = *assumptions_ptr;
+        int a = 0;
+        for (auto& tytrace : *self->call_args_type_traces) {
+            int flt_cnt = 0;
+            int long_cnt = 0;
+            int list_cnt = 0;
+            for (int i = 0; i < 5; i++)
+                if (tytrace.types[i] == &PyLong_Type)
+                    long_cnt++;
+                else if (tytrace.types[i] == &PyFloat_Type)
+                    flt_cnt++;
+                else if (tytrace.types[i] == &PyList_Type)
+                    list_cnt++;
+            if (long_cnt >= 4) assumptions[++a] = 1;
+            if (flt_cnt >= 4) assumptions[++a] = 2;
+            if (list_cnt >= 4) assumptions[++a] = 4;
+        }
+        std::thread recompiler(
+            yapyjit::intra_procedure_type_infer,
+            std::ref(*self->compiled), assumptions_ptr
+        );
+        recompiler.detach();
     }
     if (kwnames || posargs < nargs) {
         self->call_args_fill->clear();
