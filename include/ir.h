@@ -1,4 +1,17 @@
 #pragma once
+/**
+ * yapyjit uses a linear IR based on var-len instructions as a layer
+ * between python AST and backend (MIR currently).
+ *
+ * Reference rules:
+ * 1. Local registers are guaranteed to be nullptr before first def/use.
+ * 2. Each local register is either nullptr, or owns a reference in a def-use lifetime.
+ *    No other types of ownership is possible in a function.
+ * 3. After the only use of op contents in a register will be early-cleared
+ *    (does nothing if nullptr; drops reference otherwise).
+ *
+ * TODO: implement 3, for better worst-case memory usage.
+ */
 #ifdef _MSC_VER
 #pragma warning (disable: 26812)
 #endif
@@ -11,19 +24,10 @@
 #include <Python.h>
 #include <mpyo.h>
 #include <mir_wrapper.h>
-/**
- * yapyjit uses a linear IR based on var-len instructions as a layer
- * between python AST and backend (MIR currently).
- * 
- * Reference rules:
- * 1. Local registers are guaranteed to be nullptr before first def/use.
- * 2. Each local register is either nullptr, or owns a reference in a def-use lifetime.
- *    No other types of ownership is possible in a function.
- * 3. After the only use of op contents in a register will be early-cleared
- *    (does nothing if nullptr; drops reference otherwise).
- * 
- * TODO: implement 3, for better worst-case memory usage.
- */
+#define YAPYJIT_IR_COMMON(CLS) \
+	virtual Instruction* deepcopy() { return new CLS(*this); } \
+	virtual void emit(Function* func); \
+	virtual void fill_operand_info(std::vector<OperandInfo>& fill)
 
 namespace yapyjit {
 	BETTER_ENUM(
@@ -105,6 +109,7 @@ namespace yapyjit {
 		virtual ~Instruction() = default;
 		virtual std::string pretty_print() = 0;
 		virtual InsnTag tag() = 0;
+		virtual Instruction* deepcopy() = 0;
 		virtual void emit(Function* func) = 0;
 		virtual void fill_operand_info(std::vector<OperandInfo>& fill) { }
 		virtual bool control_leaves() { return false; }
@@ -121,7 +126,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "@" + std::to_string((intptr_t)this);
 		}
-		virtual void emit(Function* func);
+		YAPYJIT_IR_COMMON(LabelIns);
 	};
 
 	class RaiseIns : public InsnWithTag<InsnTag::RAISE> {
@@ -131,8 +136,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "raise $" + std::to_string(exc);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(RaiseIns);
 		virtual bool control_leaves() { return true; }
 	};
 
@@ -143,8 +147,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ret $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(ReturnIns);
 		virtual bool control_leaves() { return true; }
 	};
 
@@ -157,8 +160,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "mov $" + std::to_string(dst) + " <- $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(MoveIns);
 	};
 
 	class BinOpIns : public InsnWithTag<InsnTag::BINOP> {
@@ -172,8 +174,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(BinOpIns);
 	};
 
 	class UnaryOpIns : public InsnWithTag<InsnTag::UNARYOP> {
@@ -187,8 +188,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(operand);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(UnaryOpIns);
 	};
 
 	class CompareIns : public InsnWithTag<InsnTag::COMPARE> {
@@ -202,8 +202,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(CompareIns);
 	};
 
 	class JumpIns : public InsnWithTag<InsnTag::JUMP> {
@@ -213,7 +212,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "jmp " + target->pretty_print();
 		}
-		virtual void emit(Function* func);
+		YAPYJIT_IR_COMMON(JumpIns);
 		virtual bool control_leaves() { return true; }
 	};
 
@@ -226,8 +225,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(JumpTruthyIns);
 	};
 
 	class JumpTrueFastIns : public InsnWithTag<InsnTag::C_JUMPTRUEFAST> {
@@ -239,8 +237,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "jt.bool " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(JumpTrueFastIns);
 	};
 
 	class LoadAttrIns : public InsnWithTag<InsnTag::LOADATTR> {
@@ -254,8 +251,7 @@ namespace yapyjit {
 			return "lda $" + std::to_string(dst) + " <- $" +
 				std::to_string(src) + "." + name;
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(LoadAttrIns);
 	};
 
 	class StoreAttrIns : public InsnWithTag<InsnTag::STOREATTR> {
@@ -269,8 +265,7 @@ namespace yapyjit {
 			return "sta $" + std::to_string(dst) + "." + name
 				+ " <- $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(StoreAttrIns);
 	};
 
 	class DelAttrIns : public InsnWithTag<InsnTag::DELATTR> {
@@ -282,8 +277,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "dela $" + std::to_string(dst) + "." + name;
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(DelAttrIns);
 	};
 
 	class LoadItemIns : public InsnWithTag<InsnTag::LOADITEM> {
@@ -297,8 +291,7 @@ namespace yapyjit {
 			return "ldi $" + std::to_string(dst)
 				+ " <- $" + std::to_string(src) + "[$" + std::to_string(subscr) + "]";
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(LoadItemIns);
 	};
 
 	class StoreItemIns : public InsnWithTag<InsnTag::STOREITEM> {
@@ -312,8 +305,7 @@ namespace yapyjit {
 			return "sti $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]"
 				+ " <- $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(StoreItemIns);
 	};
 
 	class DelItemIns : public InsnWithTag<InsnTag::DELITEM> {
@@ -325,8 +317,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "deli $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]";
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(DelItemIns);
 	};
 
 	// This is a 'large' instruction that I am not quite in favor of.
@@ -341,8 +332,7 @@ namespace yapyjit {
 			return "fornx " + iterFailTo->pretty_print() + ", $" + std::to_string(dst)
 				   + " <- $" + std::to_string(iter);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(IterNextIns);
 	};
 
 	BETTER_ENUM(
@@ -367,8 +357,7 @@ namespace yapyjit {
 			}
 			return res + ")";
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(BuildIns);
 	};
 
 	class DestructIns : public InsnWithTag<InsnTag::DESTRUCT> {
@@ -385,8 +374,7 @@ namespace yapyjit {
 			}
 			return res + ")" + " <- $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(DestructIns);
 	};
 
 	class ConstantIns : public InsnWithTag<InsnTag::CONSTANT> {
@@ -399,8 +387,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ldc $" + std::to_string(dst) + " <- " + obj.repr().to_cstr();
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(ConstantIns);
 	};
 
 	class LoadGlobalIns : public InsnWithTag<InsnTag::LOADGLOBAL> {
@@ -413,8 +400,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ldg $" + std::to_string(dst) + " <- " + name;
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(LoadGlobalIns);
 	};
 
 	class StoreGlobalIns : public InsnWithTag<InsnTag::STOREGLOBAL> {
@@ -427,8 +413,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "stg " + name + " <- $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(StoreGlobalIns);
 	};
 
 	class LoadClosureIns : public InsnWithTag<InsnTag::LOADCLOSURE> {
@@ -441,8 +426,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "ldc $" + std::to_string(dst) + " <- " + name;
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(LoadClosureIns);
 	};
 
 	class StoreClosureIns : public InsnWithTag<InsnTag::STORECLOSURE> {
@@ -455,8 +439,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "stc " + name + " <- $" + std::to_string(src);
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(StoreClosureIns);
 	};
 
 	class CallIns : public InsnWithTag<InsnTag::CALL> {
@@ -482,8 +465,7 @@ namespace yapyjit {
 			}
 			return res + ")";
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(CallIns);
 	};
 
 	class CallMthdIns : public InsnWithTag<InsnTag::C_CALLMTHD> {
@@ -495,6 +477,11 @@ namespace yapyjit {
 		CallMthdIns(int dst_local_id, int obj_local_id, const std::string& method_name, const std::vector<int>& args_v, std::unique_ptr<Instruction>&& original_lda, std::unique_ptr<Instruction>&& original_call)
 			: dst(dst_local_id), obj(obj_local_id), mthd(method_name), args(args_v), orig_lda(std::move(original_lda)), orig_call(std::move(original_call)) {
 		}
+		CallMthdIns(const CallMthdIns& copy)
+			: dst(copy.dst), obj(copy.obj), mthd(copy.mthd), args(copy.args) {
+			orig_lda = std::unique_ptr<Instruction>(copy.orig_lda->deepcopy());
+			orig_call = std::unique_ptr<Instruction>(copy.orig_call->deepcopy());
+		}
 		virtual std::string pretty_print() {
 			std::string res = "call.mthd $" + std::to_string(dst) + " <- $" + std::to_string(obj) + "." + mthd + "(";
 			for (size_t i = 0; i < args.size(); i++) {
@@ -503,8 +490,7 @@ namespace yapyjit {
 			}
 			return res + ")";
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(CallMthdIns);
 	};
 
 	class CheckErrorTypeIns : public InsnWithTag<InsnTag::CHECKERRORTYPE> {
@@ -517,8 +503,7 @@ namespace yapyjit {
 			std::string res = "chkerr $" + std::to_string(ty) + " ?> $" + std::to_string(dst) + "; " + failjump->pretty_print();
 			return res;
 		}
-		virtual void emit(Function* func);
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill);
+		YAPYJIT_IR_COMMON(CheckErrorTypeIns);
 	};
 
 	class ErrorPropIns : public InsnWithTag<InsnTag::ERRORPROP> {
@@ -526,7 +511,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "errorprop";
 		}
-		virtual void emit(Function* func);
+		YAPYJIT_IR_COMMON(ErrorPropIns);
 	};
 
 	class ClearErrorCtxIns : public InsnWithTag<InsnTag::CLEARERRORCTX> {
@@ -534,7 +519,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "clearerrorctx";
 		}
-		virtual void emit(Function* func);
+		YAPYJIT_IR_COMMON(ClearErrorCtxIns);
 	};
 
 	class SetErrorLabelIns : public InsnWithTag<InsnTag::V_SETERRLAB> {
@@ -544,7 +529,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "v.seterrlab " + (!target ? "[default]" : target->pretty_print());
 		}
-		virtual void emit(Function* func);
+		YAPYJIT_IR_COMMON(SetErrorLabelIns);
 	};
 
 	class EpilogueIns : public InsnWithTag<InsnTag::V_EPILOG> {
@@ -552,7 +537,7 @@ namespace yapyjit {
 		virtual std::string pretty_print() {
 			return "epilogue";
 		}
-		virtual void emit(Function* func);
+		YAPYJIT_IR_COMMON(EpilogueIns);
 		virtual bool control_leaves() { return true; }
 	};
 

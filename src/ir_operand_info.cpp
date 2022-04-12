@@ -1,4 +1,6 @@
 #include <ir.h>
+#define IRG_OPERAND_INFO_EMPTY(CLS) \
+	void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { }
 #define IRG_OPERAND_INFO_1USE(CLS, USE_NAME) \
 	void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { \
 		fill.push_back(OperandInfo(OperandKind::Use, USE_NAME)); \
@@ -31,12 +33,13 @@
 	}
 
 namespace yapyjit {
-
+	IRG_OPERAND_INFO_EMPTY(LabelIns)
 	IRG_OPERAND_INFO_1USE(ReturnIns, src)
 	IRG_OPERAND_INFO_1DEF_1USE(MoveIns, dst, src)
 	IRG_OPERAND_INFO_1DEF_2USE(BinOpIns, dst, left, right)
 	IRG_OPERAND_INFO_1DEF_1USE(UnaryOpIns, dst, operand)
 	IRG_OPERAND_INFO_1DEF_2USE(CompareIns, dst, left, right)
+	IRG_OPERAND_INFO_EMPTY(JumpIns)
 	IRG_OPERAND_INFO_1USE(JumpTruthyIns, cond)
 	IRG_OPERAND_INFO_1USE(JumpTrueFastIns, cond)
 	IRG_OPERAND_INFO_1DEF_1USE(LoadAttrIns, dst, src)
@@ -51,7 +54,10 @@ namespace yapyjit {
 	IRG_OPERAND_INFO_1USE(StoreGlobalIns, src)
 	IRG_OPERAND_INFO_1DEF(LoadClosureIns, dst)
 	IRG_OPERAND_INFO_1USE(StoreClosureIns, src)
-
+	IRG_OPERAND_INFO_EMPTY(ErrorPropIns)
+	IRG_OPERAND_INFO_EMPTY(ClearErrorCtxIns)
+	IRG_OPERAND_INFO_EMPTY(SetErrorLabelIns)
+	IRG_OPERAND_INFO_EMPTY(EpilogueIns)
 	void RaiseIns::fill_operand_info(std::vector<OperandInfo>& fill) {
 		if (exc != -1)
 			fill.push_back(OperandInfo(OperandKind::Use, exc));
