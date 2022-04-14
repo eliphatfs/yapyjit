@@ -178,7 +178,7 @@ namespace yapyjit {
 		Op2ary op;
 		enum { GENERIC, LONG, FLOAT } mode;
 		BinOpIns(int dst_local_id, Op2ary op_, int left_local_id, int right_local_id)
-			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_) {}
+			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_), mode(GENERIC) {}
 		virtual std::string pretty_print() {
 			return std::string(op._to_string())
 				+ " $" + std::to_string(dst)
@@ -615,7 +615,7 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<PBlock>> pblocks;
 		// TODO: emit context is messy
 		std::unique_ptr<MIRFunction> emit_ctx;
-		std::unique_ptr<MIRContext> mir_ctx;
+		MIRContext* mir_ctx;  // TODO: leak
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
 		MIRRegOp return_reg, deopt_reg;

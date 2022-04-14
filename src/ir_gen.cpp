@@ -881,8 +881,8 @@ namespace yapyjit {
 	}
 
 	MIR_item_t generate_mir(Function& func) {
-		func.mir_ctx.reset();
-		func.mir_ctx = std::unique_ptr<MIRContext>(new MIRContext());
+		// func.mir_ctx.reset();
+		func.mir_ctx = new MIRContext();
 		MIRContext& mir_ctx = *func.mir_ctx;
 		auto mod = mir_ctx.new_module(func.name);
 		func.emit_ctx = mod->new_func(func.name, MIR_T_P, { MIR_T_P, MIR_T_P });

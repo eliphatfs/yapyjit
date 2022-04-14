@@ -11,11 +11,11 @@ wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObje
 static void
 wf_dealloc(JittedFuncObject* self)
 {
-    Py_CLEAR(self->wrapped);
     self->compiled.reset(nullptr);
     delete self->argid_lookup;
     delete self->defaults;
     delete self->call_args_fill;
+    Py_CLEAR(self->wrapped);
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
