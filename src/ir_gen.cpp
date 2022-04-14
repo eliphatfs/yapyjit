@@ -1,10 +1,10 @@
+#include <cmath>
 #include <gen_common.h>
 #include <gen_icache.h>
 #include "structmember.h"
 // #include <mir_link.h>
 
 namespace yapyjit {
-	MIRContext mir_ctx = MIRContext();
 
 	void LabelIns::emit(Function * func) {
 		func->emit_ctx->append_label(ensure_label(func, this));
@@ -49,6 +49,42 @@ namespace yapyjit {
 		});
 	}
 
+#define GEN_DIVMOD \
+	double floordiv, mod; \
+	double div; \
+	mod = fmod(vx, wx); \
+	div = (vx - mod) / wx; \
+	if (mod) { \
+		if ((wx < 0) != (mod < 0)) { \
+			mod += wx; \
+			div -= 1.0; \
+		} \
+	} \
+	else { \
+		mod = copysign(0.0, wx); \
+	} \
+	if (div) { \
+		floordiv = floor(div); \
+		if (div - floordiv > 0.5) { \
+			floordiv += 1.0; \
+		} \
+	} \
+	else { \
+		floordiv = copysign(0.0, vx / wx); \
+	}
+
+	static double _float_fdiv(double vx, double wx)
+	{
+		GEN_DIVMOD
+		return floordiv;
+	}
+
+	static double _float_fmod(double vx, double wx)
+	{
+		GEN_DIVMOD
+		return mod;
+	}
+
 #define GEN_SIN(op, iop) case op: emit_1pyo_call(emit_ctx, (int64_t)iop, target, a); break;
 #define GEN_BIN(op, iop) case op: emit_2pyo_call(emit_ctx, (int64_t)iop, target, a, b); break;
 #define GEN_NB_BIN_ICACHED(op, opname, opslot, flbk) \
@@ -59,8 +95,46 @@ namespace yapyjit {
 		{a, b}, target, a, b\
 	); break;
 #define GEN_CMP(op, iop) case op: emit_richcmp(emit_ctx, target, a, b, iop); break;
+#define GEN_BIN_FLOAT_FAST(op, insn) case op: emit_ctx->append_insn(insn, { target, a, b }); break;
+	void BinOpIns::binop_emit_float(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		auto target = emit_ctx->get_reg_variant(dst, "f", MIR_T_D);
+		auto a = emit_ctx->get_reg_variant(left, "f", MIR_T_D);
+		auto b = emit_ctx->get_reg_variant(right, "f", MIR_T_D);
+		switch (op)
+		{
+		GEN_BIN_FLOAT_FAST(Op2ary::Add, MIR_DADD);
+		GEN_BIN_FLOAT_FAST(Op2ary::Sub, MIR_DSUB);
+		GEN_BIN_FLOAT_FAST(Op2ary::Mult, MIR_DMUL);
+		GEN_BIN_FLOAT_FAST(Op2ary::Div, MIR_DDIV);  // TODO: check zero
+		case Op2ary::FloorDiv:
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIR_T_D, { MIR_T_D, MIR_T_D }),
+				(intptr_t)_float_fdiv, target, a, b
+			});
+			break;
+		case Op2ary::Mod:
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIR_T_D, { MIR_T_D, MIR_T_D }),
+				(intptr_t)_float_fmod, target, a, b
+			});
+			break;
+		case Op2ary::Pow:
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIR_T_D, { MIR_T_D, MIR_T_D }),
+				(intptr_t)static_cast<double(*)(double, double)>(pow), target, a, b
+			});
+			break;
+		default:
+			throw std::runtime_error("Unreachable! BinOpIns::binop_emit_float");
+		}
+	}
 
 	void BinOpIns::emit(Function* func) {
+		if (mode == FLOAT) {
+			binop_emit_float(func);
+			return;
+		}
 		auto emit_ctx = func->emit_ctx.get();
 		auto target = emit_ctx->get_reg(dst);
 		auto a = emit_ctx->get_reg(left);
@@ -279,11 +353,13 @@ namespace yapyjit {
 		auto source = func->emit_ctx->get_reg(src);
 		auto target = func->emit_ctx->get_reg(dst);
 		auto sub = func->emit_ctx->get_reg(subscr);
+		// auto end_label = func->emit_ctx->new_label();
 		emit_disown(func->emit_ctx.get(), target);
 		func->emit_ctx->append_insn(MIR_CALL, {
 			func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P }),
 			(int64_t)PyObject_GetItem, target, source, sub
 		});
+		// func->emit_ctx->append_label(end_label);
 		emit_error_check(func, target);
 	}
 
@@ -762,9 +838,55 @@ namespace yapyjit {
 		func->emit_ctx->append_insn(MIR_RET, { func->return_reg });
 	}
 
+	void UnboxIns::emit(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		if (mode == +BoxMode::f) {
+			auto set_deopt_reg = emit_ctx->new_label();
+			auto end = emit_ctx->new_label();
+			emit_ctx->append_insn(MIR_BNE, {
+				set_deopt_reg,
+				MIRMemOp(MIR_T_P, emit_ctx->get_reg(dst), offsetof(PyObject, ob_type)),
+				(intptr_t)&PyFloat_Type
+			});
+			emit_ctx->append_insn(MIR_DMOV, {
+				emit_ctx->get_reg_variant(dst, "f", MIR_T_D),
+				MIRMemOp(MIR_T_D, emit_ctx->get_reg(dst), offsetof(PyFloatObject, ob_fval))
+			});
+			emit_disown(emit_ctx, func->emit_ctx->get_reg(dst));
+			emit_ctx->append_insn(MIR_JMP, { end });
+			emit_ctx->append_label(set_deopt_reg);
+			emit_ctx->append_insn(MIR_MOV, {
+				func->deopt_reg, 1
+			});
+			emit_ctx->append_label(end);
+		}
+		else throw std::runtime_error("Unreachable in UnboxIns::emit.");
+	}
+
+	void BoxIns::emit(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		if (mode == +BoxMode::f) {
+			func->emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_D }),
+				(intptr_t)PyFloat_FromDouble,
+				func->emit_ctx->get_reg(dst),
+				emit_ctx->get_reg_variant(dst, "f", MIR_T_D)
+			});
+		}
+		else throw std::runtime_error("Unreachable in BoxIns::emit.");
+	}
+
+	void CheckDeoptIns::emit(Function* func) {
+		func->emit_ctx->append_insn(MIR_BT, { ensure_label(func, target), func->deopt_reg });
+	}
+
 	MIR_item_t generate_mir(Function& func) {
+		func.mir_ctx.reset();
+		func.mir_ctx = std::unique_ptr<MIRContext>(new MIRContext());
+		MIRContext& mir_ctx = *func.mir_ctx;
 		auto mod = mir_ctx.new_module(func.name);
 		func.emit_ctx = mod->new_func(func.name, MIR_T_P, { MIR_T_P, MIR_T_P });
+		func.deopt_reg = func.emit_ctx->new_temp_reg(MIR_T_I64);
 		func.return_reg = func.emit_ctx->new_temp_reg(MIR_T_I64);
 		func.epilogue_label = func.emit_ctx->new_label();
 		func.error_label = func.epilogue_label;
@@ -776,6 +898,9 @@ namespace yapyjit {
 					func.slot_offsets[memb[i].name] = memb[i].offset;
 				}
 		}
+		func.emit_ctx->append_insn(MIR_MOV, {
+			func.deopt_reg, 0
+		});
 
 		for (auto& loc : func.locals) {
 			func.emit_ctx->new_reg(MIR_T_I64, loc.second);

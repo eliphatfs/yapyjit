@@ -2,6 +2,7 @@
 #include <yapyjit.h>
 #include <pybind_jitted_func.h>
 #include <ir.h>
+#include <sstream>
 #include "structmember.h"
 
 static PyObject*
@@ -34,6 +35,7 @@ wf_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
         self->call_args_type_traces = nullptr;
         self->callable_impl = (vectorcallfunc)wf_fastcall;
         self->call_count = 0;
+        self->tier = 0;
     }
     return (PyObject*)self;
 }
@@ -97,12 +99,14 @@ wf_init(JittedFuncObject* self, PyObject* args)
             self->compiled->py_cls = yapyjit::ManagedPyo(pyclass, true);
         self->compiled->tracing_enabled_p = true;
         self->generated = yapyjit::generate_mir(*self->compiled);
+        self->tier = 1;
     }
     return 0;
 }
 
 static PyMemberDef wf_members[] = {
     {"wrapped", T_OBJECT_EX, offsetof(JittedFuncObject, wrapped), 0, "wrapped python function"},
+    {"tier", T_INT, offsetof(JittedFuncObject, tier), READONLY, "JIT tier (0: not compiled, 1: compiled, 2: optimized once with trace)"},
     {NULL}
 };
 
@@ -126,14 +130,26 @@ wf_mir(JittedFuncObject* self, PyObject* args) {
     if (!fp) throw std::invalid_argument(std::string("wf_mir cannot open file") + fp_parsed);
     if (!self->generated)
         throw std::invalid_argument(std::string("wf_mir got invalid function"));
-    MIR_output_item(yapyjit::mir_ctx.ctx, fp, self->generated);
+    MIR_output_item(self->compiled->mir_ctx->ctx, fp, self->generated);
     fclose(fp);
     Py_RETURN_NONE;
+}
+
+PyObject*
+wf_ir(JittedFuncObject* self, PyObject* args) {
+    std::stringstream ss;
+    for (auto& insn : self->compiled->instructions) {
+        ss << insn->pretty_print() << std::endl;
+    }
+    return PyUnicode_FromString(ss.str().c_str());
 }
 
 static PyMethodDef wf_methods[] = {
     {"mir", (PyCFunction)yapyjit::guarded<wf_mir>(), METH_VARARGS,
      "Dumps the generated MIR into file provided by path as argument 0."
+    },
+    {"ir", (PyCFunction)yapyjit::guarded<wf_ir>(), METH_VARARGS,
+     "Dumps the compiled IR as a string."
     },
     {NULL}  /* Sentinel */
 };
@@ -144,17 +160,13 @@ PyTypeObject JittedFuncType = {
 
 typedef PyObject* (*_yapyjit_fastercall) (JittedFuncObject*, PyObject* const*);
 
-namespace yapyjit {
-    extern std::map<int, int> intra_procedure_type_infer(Function& func, std::map<int, int>* assumption_ptr);
-}
-
 static PyObject*
 wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
     Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
     auto callargs = args;
     auto posargs = PyVectorcall_NARGS(nargsf);
     ++self->call_count;
-    if (self->call_count >= 8 && self->compiled->tracing_enabled_p) {
+    if (self->call_count >= 5 && self->compiled->tracing_enabled_p) {
         // TODO: issue re-compiling on background thread
         // If traced info allows opt, recompile with that
         // Otherwise, turn off tracing and recompile
@@ -166,30 +178,12 @@ wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObje
             PyObject_Print(PyUnicode_FromString("\n"), stdout, Py_PRINT_RAW);
         }*/
         self->compiled->tracing_enabled_p = false;
-
-        auto assumptions_ptr = new std::map<int, int>();
-        auto& assumptions = *assumptions_ptr;
-        int a = 0;
-        for (auto& tytrace : *self->call_args_type_traces) {
-            int flt_cnt = 0;
-            int long_cnt = 0;
-            int list_cnt = 0;
-            for (int i = 0; i < 5; i++)
-                if (tytrace.types[i] == &PyLong_Type)
-                    long_cnt++;
-                else if (tytrace.types[i] == &PyFloat_Type)
-                    flt_cnt++;
-                else if (tytrace.types[i] == &PyList_Type)
-                    list_cnt++;
-            if (long_cnt >= 4) assumptions[++a] = 1;
-            if (flt_cnt >= 4) assumptions[++a] = 2;
-            if (list_cnt >= 4) assumptions[++a] = 4;
-        }
-        std::thread recompiler(
-            yapyjit::intra_procedure_type_infer,
-            std::ref(*self->compiled), assumptions_ptr
+        // Py_INCREF((PyObject*)self);
+        yapyjit::recompile(self);
+        /*std::thread recompiler(
+            yapyjit::recompile, self
         );
-        recompiler.detach();
+        recompiler.detach();*/
     }
     if (kwnames || posargs < nargs) {
         self->call_args_fill->clear();

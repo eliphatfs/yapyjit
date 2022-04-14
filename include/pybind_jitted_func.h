@@ -17,10 +17,12 @@ typedef struct {
     vectorcallfunc callable_impl;
     PyObject* extra_attrdict;
     int call_count;
+    int tier;
 } JittedFuncObject;
 
 extern PyTypeObject JittedFuncType;
 
 namespace yapyjit {
     extern int init_pybind_jitted_func(PyObject* m);
+    extern void recompile(JittedFuncObject* self);
 }

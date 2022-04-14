@@ -9,16 +9,6 @@
 #include <mpyo.h>
 
 namespace yapyjit {
-	inline int new_temp_var(Function& appender) {
-		for (int i = (int)appender.locals.size();; i++) {
-			const auto insert_res = appender.locals.insert(
-				{ "_yapyjit_loc_" + std::to_string(i), (int)appender.locals.size() + 1 }
-			);
-			if (insert_res.second) {
-				return insert_res.first->second;
-			}
-		}
-	}
 
 	BETTER_ENUM(
 		ASTTag, int,

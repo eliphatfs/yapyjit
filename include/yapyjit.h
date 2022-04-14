@@ -7,7 +7,7 @@
 static_assert(sizeof(Py_ssize_t) == 8, "Only 64 bit machines are supported");
 
 namespace yapyjit {
-    extern MIRContext mir_ctx;
+    // extern MIRContext mir_ctx;
 	extern std::unique_ptr<AST> ast_py2native(ManagedPyo ast);
 	extern MIR_item_t generate_mir(Function& func);
 
@@ -37,7 +37,7 @@ namespace yapyjit {
     }
 }
 
-#define N_TYPE_TRACE_ENTRY 5
+#define N_TYPE_TRACE_ENTRY 4
 typedef struct {
     PyTypeObject* types[N_TYPE_TRACE_ENTRY];
     int idx;  // round-robin

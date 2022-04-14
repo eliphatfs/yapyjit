@@ -88,6 +88,7 @@ public:
 	MIR_context_t ctx;
 	MIRModule* parent;
 	MIR_item_t func;
+	std::set<std::string> variant_set;
 	MIRFunction(
 		MIR_context_t ctx_, MIRModule* parent_, const std::string& name,
 		MIR_type_t ret_type, std::initializer_list<MIR_type_t> arg_tys
@@ -112,6 +113,15 @@ public:
 
 	MIRRegOp get_reg(const int reg_id) {
 		auto name = ("x" + std::to_string(reg_id));
+		return MIRRegOp(MIR_reg(ctx, name.c_str(), func->u.func));
+	}
+
+	MIRRegOp get_reg_variant(const int reg_id, const char* variant, MIR_type_t regtype) {
+		auto name = (std::string("xv") + variant + std::to_string(reg_id));
+		auto insersion = variant_set.insert(name);
+		if (insersion.second) {
+			return MIRRegOp(MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str()));
+		}
 		return MIRRegOp(MIR_reg(ctx, name.c_str(), func->u.func));
 	}
 

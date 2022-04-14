@@ -59,6 +59,9 @@ namespace yapyjit {
 		STOREGLOBAL,
 		STOREITEM,
 		UNARYOP,
+		O_UNBOX,
+		O_BOX,
+		O_CHECKDEOPT,
 		// C_ insns will not exist before combining insns/peephole opt
 		// We do not need to include these in analysis
 		// Update: it is a JIT and during recompilation perhaps we need
@@ -87,16 +90,22 @@ namespace yapyjit {
 
 	BETTER_ENUM(
 		OperandKind, int,
-		Def = 1, Use = 2
+		Def = 1, Use = 2, JumpLabel = 3
 	)
-
 	class Function;
+	class LabelIns;
 	struct OperandInfo {
 		OperandKind kind;
 		union {
 			int local;
+			LabelIns** label;
 		};
-		OperandInfo(OperandKind kind_, int val_) : kind(kind_) {
+		OperandInfo(OperandKind kind_, LabelIns*& lab_) : kind(kind_) {
+			if (kind_ == +OperandKind::JumpLabel)
+				label = &lab_;
+			else throw std::runtime_error("OperandInfo ctor: Unreachable!");
+		}
+		OperandInfo(OperandKind kind_, int& val_) : kind(kind_) {
 			if (kind_ == +OperandKind::Def || kind_ == +OperandKind::Use)
 				local = val_;
 			else throw std::runtime_error("OperandInfo ctor: Unreachable!");
@@ -167,6 +176,7 @@ namespace yapyjit {
 	public:
 		int dst, left, right;
 		Op2ary op;
+		enum { GENERIC, LONG, FLOAT } mode;
 		BinOpIns(int dst_local_id, Op2ary op_, int left_local_id, int right_local_id)
 			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_) {}
 		virtual std::string pretty_print() {
@@ -174,6 +184,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
+		void binop_emit_float(Function* func);
 		YAPYJIT_IR_COMMON(BinOpIns);
 	};
 
@@ -285,8 +296,9 @@ namespace yapyjit {
 		int subscr;
 		int dst;
 		int src;
+		enum { GENERIC, PREFER_LIST } emit_mode;
 		LoadItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
-			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id) {}
+			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id), emit_mode(GENERIC) {}
 		virtual std::string pretty_print() {
 			return "ldi $" + std::to_string(dst)
 				+ " <- $" + std::to_string(src) + "[$" + std::to_string(subscr) + "]";
@@ -540,6 +552,41 @@ namespace yapyjit {
 		YAPYJIT_IR_COMMON(EpilogueIns);
 		virtual bool control_leaves() { return true; }
 	};
+	BETTER_ENUM(
+		BoxMode, int,
+		i, f
+	);
+	class UnboxIns : public InsnWithTag<InsnTag::O_UNBOX> {
+	public:
+		int dst;
+		BoxMode mode;
+		UnboxIns(int dst_local_id, BoxMode mode_)
+			: dst(dst_local_id), mode(mode_) {}
+		virtual std::string pretty_print() {
+			return "unbox." + std::string(mode._to_string()) + " $" + std::to_string(dst);
+		}
+		YAPYJIT_IR_COMMON(UnboxIns);
+	};
+	class BoxIns : public InsnWithTag<InsnTag::O_BOX> {
+	public:
+		int dst;
+		BoxMode mode;
+		BoxIns(int dst_local_id, BoxMode mode_)
+			: dst(dst_local_id), mode(mode_) {}
+		virtual std::string pretty_print() {
+			return "box." + std::string(mode._to_string()) + " $" + std::to_string(dst);
+		}
+		YAPYJIT_IR_COMMON(BoxIns);
+	};
+	class CheckDeoptIns : public InsnWithTag<InsnTag::O_CHECKDEOPT> {
+	public:
+		LabelIns* target;
+		CheckDeoptIns(LabelIns* target_) : target(target_) {}
+		virtual std::string pretty_print() {
+			return "chkdeopt " + target->pretty_print();
+		}
+		YAPYJIT_IR_COMMON(CheckDeoptIns);
+	};
 
 	class DefUseResult {
 	public:
@@ -557,6 +604,7 @@ namespace yapyjit {
 		std::string name;
 		std::vector<std::unique_ptr<Instruction>> instructions;
 		std::map<std::string, int> locals;  // ID is local register index
+		std::map<int, MIR_type_t> unboxed_local_type_map;
 		std::map<std::string, int> closure;  // ID is deref ns index
 		std::set<std::string> globals;
 		std::map<std::string, int> slot_offsets;
@@ -567,9 +615,10 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<PBlock>> pblocks;
 		// TODO: emit context is messy
 		std::unique_ptr<MIRFunction> emit_ctx;
+		std::unique_ptr<MIRContext> mir_ctx;
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
-		MIRRegOp return_reg;
+		MIRRegOp return_reg, deopt_reg;
 		MIRLabelOp epilogue_label;
 		MIRLabelOp error_label;
 		bool tracing_enabled_p;
@@ -578,7 +627,7 @@ namespace yapyjit {
 		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
 			globals_ns(globals_ns_), deref_ns(deref_ns_),
 			py_cls(Py_None, true), name(name_), nargs(nargs_),
-			return_reg(0), epilogue_label(nullptr), error_label(nullptr),
+			return_reg(0), deopt_reg(0), epilogue_label(nullptr), error_label(nullptr),
 			tracing_enabled_p(false) {}
 
 		// Consumes ownership. Recommended to use only with `new` instructions.
@@ -600,4 +649,15 @@ namespace yapyjit {
 		DefUseResult loc_defuse();
 		void peephole();
 	};
+
+	inline int new_temp_var(Function& appender) {
+		for (int i = (int)appender.locals.size();; i++) {
+			const auto insert_res = appender.locals.insert(
+				{ "_yapyjit_loc_" + std::to_string(i), (int)appender.locals.size() + 1 }
+			);
+			if (insert_res.second) {
+				return insert_res.first->second;
+			}
+		}
+	}
 };
