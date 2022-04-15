@@ -84,21 +84,16 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
         return nullptr;
 }
 
-PyDoc_STRVAR(yapyjit_enable_recompile_debug_doc, "enable_recompile_debug()\
+PyDoc_STRVAR(yapyjit_enable_recompile_debug_doc, "set_recompile_debug_enabled(enabled)\
 \
-Enable verbose debug prints in recompilation phase.");
+Enable/Disable verbose debug prints in recompilation phase.");
 
 PyObject* yapyjit_enable_recompile_debug(PyObject* self, PyObject* args) {
-    yapyjit::recompile_debug_enabled = true;
-    Py_RETURN_NONE;
-}
-
-PyDoc_STRVAR(yapyjit_disable_recompile_debug_doc, "disable_recompile_debug()\
-\
-Disable verbose debug prints in recompilation phase.");
-
-PyObject* yapyjit_disable_recompile_debug(PyObject* self, PyObject* args) {
-    yapyjit::recompile_debug_enabled = false;
+    PyObject* thearg = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &thearg)) {
+        return nullptr;
+    }
+    yapyjit::recompile_debug_enabled = PyObject_IsTrue(thearg);
     Py_RETURN_NONE;
 }
 
@@ -108,8 +103,7 @@ PyObject* yapyjit_disable_recompile_debug(PyObject* self, PyObject* args) {
 static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
     { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
-    { "enable_recompile_debug", (PyCFunction)yapyjit_enable_recompile_debug, METH_VARARGS, yapyjit_enable_recompile_debug_doc },
-    { "disable_recompile_debug", (PyCFunction)yapyjit_disable_recompile_debug, METH_VARARGS, yapyjit_disable_recompile_debug_doc },
+    { "set_recompile_debug_enabled", (PyCFunction)yapyjit_enable_recompile_debug, METH_VARARGS, yapyjit_enable_recompile_debug_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 

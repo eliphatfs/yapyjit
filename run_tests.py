@@ -9,7 +9,7 @@ import unittest
 
 # input("Press Enter to continue...")
 # import yapyjit
-# yapyjit.enable_recompile_debug()
+# yapyjit.set_recompile_debug_enabled(True)
 print("Python", sys.version)
 __unittest = True
 unittest.main(module=None, argv=['unittest', 'discover', '-v'])
