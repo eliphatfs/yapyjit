@@ -5,6 +5,17 @@
 // #include <mir_link.h>
 
 namespace yapyjit {
+	inline void gen_update_type_trace(Function * func, int dst) {
+		auto obj = func->emit_ctx->get_reg(dst);
+		std::unique_ptr<TypeTraceEntry>& entry = func->insn_type_trace_entries[dst];
+		if (!entry)
+			entry = std::make_unique<TypeTraceEntry>();
+		func->emit_ctx->append_insn(MIR_CALL, {
+			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P }),
+			(int64_t)update_type_trace_entry, (intptr_t)entry.get(),
+			MIRMemOp(MIR_T_P, obj, offsetof(PyObject, ob_type))
+		});
+	}
 
 	void LabelIns::emit(Function * func) {
 		func->emit_ctx->append_label(ensure_label(func, this));
@@ -41,12 +52,20 @@ namespace yapyjit {
 
 	void MoveIns::emit(Function* func) {
 		if (dst == src) return;  // No-op
-		emit_newown(func->emit_ctx.get(), func->emit_ctx->get_reg(src));
-		emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(dst));
-		func->emit_ctx->append_insn(MIR_MOV, {
-			func->emit_ctx->get_reg(dst),
-			func->emit_ctx->get_reg(src)
-		});
+		if (mode == GENERIC) {
+			emit_newown(func->emit_ctx.get(), func->emit_ctx->get_reg(src));
+			emit_disown(func->emit_ctx.get(), func->emit_ctx->get_reg(dst));
+			func->emit_ctx->append_insn(MIR_MOV, {
+				func->emit_ctx->get_reg(dst),
+				func->emit_ctx->get_reg(src)
+			});
+		}
+		if (mode == FLOAT) {
+			func->emit_ctx->append_insn(MIR_DMOV, {
+				func->emit_ctx->get_reg_variant(dst, "f", MIR_T_D),
+				func->emit_ctx->get_reg_variant(src, "f", MIR_T_D)
+			});
+		}
 	}
 
 #define GEN_DIVMOD \
@@ -347,6 +366,7 @@ namespace yapyjit {
 			emit_ctx->append_label(skip);
 		}
 		emit_error_check(func, target);
+		gen_update_type_trace(func, dst);
 	}
 
 	void LoadItemIns::emit(Function* func) {
@@ -649,6 +669,7 @@ namespace yapyjit {
 		auto pyfn = ctx->emit_ctx->get_reg(func);
 
 		emit_call(ctx, target, pyfn, args, kwargs);
+		gen_update_type_trace(ctx, dst);
 	}
 
 	static int _PyObject_GetMethod_Copy(PyObject* obj, PyObject* name, PyObject** method) {
@@ -761,6 +782,7 @@ namespace yapyjit {
 		auto args_mod(args);
 		args_mod.insert(args_mod.begin(), obj);
 		emit_call(ctx, target, pyfn, args_mod, ((CallIns*)orig_call.get())->kwargs);
+		gen_update_type_trace(ctx, dst);
 		// emit_disown(emit_ctx, pyfn);
 		auto end_label = emit_ctx->new_label();
 		emit_ctx->append_insn(MIR_JMP, { end_label });

@@ -7,6 +7,7 @@
 #include <pybind_jitted_func.h>
 using namespace yapyjit;
 
+bool yapyjit::recompile_debug_enabled = false;
 
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
 \
@@ -83,12 +84,32 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
         return nullptr;
 }
 
+PyDoc_STRVAR(yapyjit_enable_recompile_debug_doc, "enable_recompile_debug()\
+\
+Enable verbose debug prints in recompilation phase.");
+
+PyObject* yapyjit_enable_recompile_debug(PyObject* self, PyObject* args) {
+    yapyjit::recompile_debug_enabled = true;
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(yapyjit_disable_recompile_debug_doc, "disable_recompile_debug()\
+\
+Disable verbose debug prints in recompilation phase.");
+
+PyObject* yapyjit_disable_recompile_debug(PyObject* self, PyObject* args) {
+    yapyjit::recompile_debug_enabled = false;
+    Py_RETURN_NONE;
+}
+
 /*
  * List of functions to add to yapyjit in exec_yapyjit().
  */
 static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
     { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
+    { "enable_recompile_debug", (PyCFunction)yapyjit_enable_recompile_debug, METH_VARARGS, yapyjit_enable_recompile_debug_doc },
+    { "disable_recompile_debug", (PyCFunction)yapyjit_disable_recompile_debug, METH_VARARGS, yapyjit_disable_recompile_debug_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 

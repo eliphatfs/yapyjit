@@ -10,6 +10,7 @@ namespace yapyjit {
     // extern MIRContext mir_ctx;
 	extern std::unique_ptr<AST> ast_py2native(ManagedPyo ast);
 	extern MIR_item_t generate_mir(Function& func);
+    extern bool recompile_debug_enabled;
 
 	inline ManagedPyo get_py_ast(PyObject* pyfunc) {
         auto locals = ManagedPyo(PyDict_New());
@@ -36,16 +37,3 @@ namespace yapyjit {
         return funcast->emit_ir_f(pyfunc);
     }
 }
-
-#define N_TYPE_TRACE_ENTRY 4
-typedef struct {
-    PyTypeObject* types[N_TYPE_TRACE_ENTRY];
-    int idx;  // round-robin
-} TypeTraceEntry;
-
-inline void update_type_trace_entry(TypeTraceEntry* entry, PyTypeObject* ty) {
-    entry->types[entry->idx++] = ty;
-    if (entry->idx >= N_TYPE_TRACE_ENTRY)
-        entry->idx = 0;
-}
-

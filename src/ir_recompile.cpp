@@ -5,6 +5,7 @@
 #include <list>
 #include <set>
 #include <map>
+#include <chrono>
 #define TYI_LONG_FLAG 1
 #define TYI_FLOAT_FLAG 2
 #define TYI_LIST_FLAG 4
@@ -80,6 +81,13 @@ namespace yapyjit {
 						_update_tyi_result(results, changed, insn_b->dst, TYI_LIST_FLAG);
 					break;
 				}
+				case InsnTag::MOVE: {
+					auto insn_b = (MoveIns*)insn.get();
+					if (assumptions.count(insn_b->dst)) break;
+					if (results.count(insn_b->src))
+						_update_tyi_result(results, changed, insn_b->dst, results[insn_b->src]);
+					break;
+				}
 				default: {
 					general_info.clear();
 					insn->fill_operand_info(general_info);
@@ -109,6 +117,7 @@ namespace yapyjit {
 	}
 
 	void recompile(JittedFuncObject* self) {
+		auto t0 = std::chrono::high_resolution_clock::now();
 		std::map<int, int> assumptions;
 		int a = 0;
 		for (const auto& tytrace : *self->call_args_type_traces) {
@@ -125,6 +134,23 @@ namespace yapyjit {
 			if (long_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[++a] = 1;
 			if (flt_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[++a] = 2;
 			if (list_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[++a] = 4;
+		}
+		for (const auto& tracepair : self->compiled->insn_type_trace_entries) {
+			if (assumptions.count(tracepair.first)) continue;
+			int flt_cnt = 0;
+			int long_cnt = 0;
+			int list_cnt = 0;
+			auto& tytrace = *tracepair.second;
+			for (int i = 0; i < N_TYPE_TRACE_ENTRY; i++)
+				if (tytrace.types[i] == &PyLong_Type)
+					long_cnt++;
+				else if (tytrace.types[i] == &PyFloat_Type)
+					flt_cnt++;
+				else if (tytrace.types[i] == &PyList_Type)
+					list_cnt++;
+			if (long_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[tracepair.first] = 1;
+			if (flt_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[tracepair.first] = 2;
+			if (list_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[tracepair.first] = 4;
 		}
 		auto ty_inf = intra_procedure_type_infer(*self->compiled, assumptions);
 		/*
@@ -164,6 +190,17 @@ namespace yapyjit {
 				if (ty_inf[insn_b->left] == TYI_FLOAT_FLAG && ty_inf[insn_b->right] == TYI_FLOAT_FLAG) {
 					auto opt = (BinOpIns*)insn_b->deepcopy();
 					opt->mode = BinOpIns::FLOAT;
+					temp_insns_opt.push_back(opt);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
+				}
+				break;
+			}
+			case InsnTag::MOVE: {
+				auto insn_b = (MoveIns*)insn.get();
+				if (ty_inf[insn_b->dst] == TYI_FLOAT_FLAG && ty_inf[insn_b->src] == TYI_FLOAT_FLAG) {
+					auto opt = (MoveIns*)insn_b->deepcopy();
+					opt->mode = MoveIns::FLOAT;
 					temp_insns_opt.push_back(opt);
 					temp_insns_unopt.push_back(insn.release());
 					continue;
@@ -247,12 +284,20 @@ namespace yapyjit {
 		for (auto insn : temp_insns_unopt) {
 			self->compiled->instructions.push_back(std::unique_ptr<Instruction>(insn));
 		}
-		/*printf("\n");
-		PyObject_Print(self->wrapped, stdout, 0);
-		printf("\n");
-		PyObject_Print(wf_ir(self, nullptr), stdout, Py_PRINT_RAW);
-		printf("\n");*/
+		auto t1 = std::chrono::high_resolution_clock::now();
+		if (recompile_debug_enabled) {
+			printf("\n");
+			PyObject_Print(self->wrapped, stdout, 0);
+			printf("\n");
+			PyObject_Print(wf_ir(self, nullptr), stdout, Py_PRINT_RAW);
+		}
+		auto t2 = std::chrono::high_resolution_clock::now();
 		self->generated = yapyjit::generate_mir(*self->compiled);
+		auto t3 = std::chrono::high_resolution_clock::now();
+		if (recompile_debug_enabled) {
+			printf("Recompilation time: %.2f ms\n", (t1 - t0).count() / 1000000.0);
+			printf("Emission time: %.2f ms\n", (t3 - t2).count() / 1000000.0);
+		}
 		self->tier = 2;
 	}
 }

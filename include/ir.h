@@ -29,6 +29,18 @@
 	virtual void emit(Function* func); \
 	virtual void fill_operand_info(std::vector<OperandInfo>& fill)
 
+#define N_TYPE_TRACE_ENTRY 4
+typedef struct {
+	PyTypeObject* types[N_TYPE_TRACE_ENTRY];
+	int idx;  // round-robin
+} TypeTraceEntry;
+
+inline void update_type_trace_entry(TypeTraceEntry* entry, PyTypeObject* ty) {
+	entry->types[entry->idx++] = ty;
+	if (entry->idx >= N_TYPE_TRACE_ENTRY)
+		entry->idx = 0;
+}
+
 namespace yapyjit {
 	BETTER_ENUM(
 		InsnTag, int,
@@ -164,10 +176,13 @@ namespace yapyjit {
 	public:
 		int dst;
 		int src;
+		enum { GENERIC, FLOAT } mode;
 		MoveIns(int dst_local_id, int src_local_id)
-			: dst(dst_local_id), src(src_local_id) {}
+			: dst(dst_local_id), src(src_local_id), mode(GENERIC) {}
 		virtual std::string pretty_print() {
-			return "mov $" + std::to_string(dst) + " <- $" + std::to_string(src);
+			const char* modeid = "gf";
+			return "mov" + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
+				+ " $" + std::to_string(dst) + " <- $" + std::to_string(src);
 		}
 		YAPYJIT_IR_COMMON(MoveIns);
 	};
@@ -180,7 +195,8 @@ namespace yapyjit {
 		BinOpIns(int dst_local_id, Op2ary op_, int left_local_id, int right_local_id)
 			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_), mode(GENERIC) {}
 		virtual std::string pretty_print() {
-			return std::string(op._to_string())
+			const char* modeid = "glf";
+			return op._to_string() + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
@@ -618,6 +634,7 @@ namespace yapyjit {
 		MIRContext* mir_ctx;  // TODO: leak
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
+		std::map<int, std::unique_ptr<TypeTraceEntry>> insn_type_trace_entries;
 		MIRRegOp return_reg, deopt_reg;
 		MIRLabelOp epilogue_label;
 		MIRLabelOp error_label;
@@ -626,7 +643,7 @@ namespace yapyjit {
 
 		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
 			globals_ns(globals_ns_), deref_ns(deref_ns_),
-			py_cls(Py_None, true), name(name_), nargs(nargs_),
+			py_cls(Py_None, true), name(name_), nargs(nargs_), mir_ctx(nullptr),
 			return_reg(0), deopt_reg(0), epilogue_label(nullptr), error_label(nullptr),
 			tracing_enabled_p(false) {}
 
