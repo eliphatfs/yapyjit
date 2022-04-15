@@ -116,11 +116,15 @@ public:
 		return MIRRegOp(MIR_reg(ctx, name.c_str(), func->u.func));
 	}
 
-	MIRRegOp get_reg_variant(const int reg_id, const char* variant, MIR_type_t regtype) {
+	MIRRegOp get_reg_variant(const int reg_id, const char* variant, MIR_type_t regtype, bool zi_init = false) {
 		auto name = (std::string("xv") + variant + std::to_string(reg_id));
 		auto insersion = variant_set.insert(name);
 		if (insersion.second) {
-			return MIRRegOp(MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str()));
+			auto reg = MIR_new_func_reg(ctx, func->u.func, regtype, name.c_str());
+			if (zi_init) {
+				inject_insn_at_begin(MIR_MOV, { MIRRegOp(reg), 0 });
+			}
+			return MIRRegOp(reg);
 		}
 		return MIRRegOp(MIR_reg(ctx, name.c_str(), func->u.func));
 	}
@@ -142,6 +146,16 @@ public:
 
 	void append_label(MIRLabelOp lab) {
 		MIR_append_insn(ctx, func, lab.op.u.label);
+	}
+
+	void inject_insn_at_begin(MIR_insn_code_t code, const std::vector<MIROp>& Ops) {
+		std::vector<MIR_op_t> v;
+		for (const auto& op : Ops) {
+			v.push_back(op.op);
+		}
+		MIR_prepend_insn(ctx, func, MIR_new_insn_arr(
+			ctx, code, Ops.size(), v.data()
+		));
 	}
 
 	void append_insn(MIR_insn_code_t code, const std::vector<MIROp>& Ops) {

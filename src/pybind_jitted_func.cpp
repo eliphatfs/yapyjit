@@ -99,6 +99,7 @@ wf_init(JittedFuncObject* self, PyObject* args)
             self->compiled->py_cls = yapyjit::ManagedPyo(pyclass, true);
         self->compiled->tracing_enabled_p = true;
         self->generated = yapyjit::generate_mir(*self->compiled);
+        MIR_link(self->compiled->mir_ctx->ctx, MIR_set_gen_interface, nullptr);
         self->tier = 1;
     }
     return 0;
@@ -139,7 +140,10 @@ PyObject*
 wf_ir(JittedFuncObject* self, PyObject* args) {
     std::stringstream ss;
     for (auto& insn : self->compiled->instructions) {
-        ss << insn->pretty_print() << std::endl;
+        if (insn)
+            ss << insn->pretty_print() << std::endl;
+        else
+            ss << "<nullptr>" << std::endl;
     }
     return PyUnicode_FromString(ss.str().c_str());
 }

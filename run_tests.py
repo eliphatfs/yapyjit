@@ -8,6 +8,8 @@ import unittest
 
 
 # input("Press Enter to continue...")
+# import yapyjit
+# yapyjit.enable_recompile_debug()
 print("Python", sys.version)
 __unittest = True
 unittest.main(module=None, argv=['unittest', 'discover', '-v'])

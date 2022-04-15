@@ -17,6 +17,15 @@ namespace yapyjit {
 		});
 	}
 
+	inline void emit_set_unbox_flag(Function* func, int dst) {
+		auto emit_ctx = func->emit_ctx.get();
+		emit_ctx->append_insn(MIR_OR, {
+			emit_ctx->get_reg_variant(dst / 48, "fu", MIR_T_I64, true),
+			emit_ctx->get_reg_variant(dst / 48, "fu", MIR_T_I64, true),
+			1LL << (dst % 48)
+		});
+	}
+
 	void LabelIns::emit(Function * func) {
 		func->emit_ctx->append_label(ensure_label(func, this));
 	}
@@ -65,6 +74,7 @@ namespace yapyjit {
 				func->emit_ctx->get_reg_variant(dst, "f", MIR_T_D),
 				func->emit_ctx->get_reg_variant(src, "f", MIR_T_D)
 			});
+			emit_set_unbox_flag(func, dst);
 		}
 	}
 
@@ -147,6 +157,7 @@ namespace yapyjit {
 		default:
 			throw std::runtime_error("Unreachable! BinOpIns::binop_emit_float");
 		}
+		emit_set_unbox_flag(func, dst);
 	}
 
 	void BinOpIns::emit(Function* func) {
@@ -874,6 +885,7 @@ namespace yapyjit {
 				emit_ctx->get_reg_variant(dst, "f", MIR_T_D),
 				MIRMemOp(MIR_T_D, emit_ctx->get_reg(dst), offsetof(PyFloatObject, ob_fval))
 			});
+			emit_set_unbox_flag(func, dst);
 			emit_disown(emit_ctx, func->emit_ctx->get_reg(dst));
 			emit_ctx->append_insn(MIR_JMP, { end });
 			emit_ctx->append_label(set_deopt_reg);
@@ -888,18 +900,41 @@ namespace yapyjit {
 	void BoxIns::emit(Function* func) {
 		auto emit_ctx = func->emit_ctx.get();
 		if (mode == +BoxMode::f) {
-			func->emit_ctx->append_insn(MIR_CALL, {
-				func->emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_D }),
+			auto temp = emit_ctx->new_temp_reg(MIR_T_I64);
+			auto regflg = emit_ctx->get_reg_variant(dst / 48, "fu", MIR_T_I64, true);
+			emit_ctx->append_insn(MIR_AND, {
+				temp, regflg, 1LL << (dst % 48)
+			});
+			// emit_debug_print_pyo(emit_ctx, (intptr_t)PyUnicode_FromString("BOX CHK\n"));
+			auto skip = emit_jump_if_not(emit_ctx, temp);
+			// emit_debug_print_pyo(emit_ctx, (intptr_t)PyUnicode_FromString("BOX\n"));
+			emit_ctx->append_insn(MIR_XOR, {
+				regflg, regflg, 1LL << (dst % 48)
+			});
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_D }),
 				(intptr_t)PyFloat_FromDouble,
-				func->emit_ctx->get_reg(dst),
+				emit_ctx->get_reg(dst),
 				emit_ctx->get_reg_variant(dst, "f", MIR_T_D)
 			});
+			emit_ctx->append_label(skip);
 		}
 		else throw std::runtime_error("Unreachable in BoxIns::emit.");
 	}
 
 	void CheckDeoptIns::emit(Function* func) {
-		func->emit_ctx->append_insn(MIR_BT, { ensure_label(func, target), func->deopt_reg });
+		auto skip = emit_jump_if_not(func->emit_ctx.get(), func->deopt_reg);
+		func->emit_ctx->append_insn(MIR_MOV, { func->deopt_reg, switcher });
+		func->emit_ctx->append_insn(MIR_JMP, { ensure_label(func, target) });
+		func->emit_ctx->append_label(skip);
+	}
+
+	void SwitchDeoptIns::emit(Function* func) {
+		std::vector<MIROp> ops;
+		ops.push_back(func->deopt_reg);
+		for (auto label : targets)
+			ops.push_back(ensure_label(func, label));
+		func->emit_ctx->append_insn(MIR_SWITCH, ops);
 	}
 
 	MIR_item_t generate_mir(Function& func) {
@@ -957,7 +992,6 @@ namespace yapyjit {
 		mod.reset(nullptr);
 
 		mir_ctx.load_module(mir_mod);
-		MIR_link(mir_ctx.ctx, MIR_set_gen_interface, nullptr);
 
 		return mir_func;
 	}

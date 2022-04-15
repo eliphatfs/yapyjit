@@ -5,7 +5,9 @@
 #include <list>
 #include <set>
 #include <map>
+#include <queue>
 #include <chrono>
+#include <thread>
 #define TYI_LONG_FLAG 1
 #define TYI_FLOAT_FLAG 2
 #define TYI_LIST_FLAG 4
@@ -22,6 +24,77 @@ namespace yapyjit {
 			changed = true;
 			results[dst] = dst_prev & dst_infer;
 		}
+	}
+	std::map<Instruction*, std::set<int>> live_var_analysis(Function& func) {
+		std::map<Instruction*, std::list<Instruction*>> prev;
+		std::map<Instruction*, std::list<Instruction*>> next;
+		std::map<Instruction*, std::set<int>> result;
+		Instruction* error_label = nullptr;
+		std::vector<OperandInfo> opinfo_fill;
+		for (size_t i = 0; i < func.instructions.size(); i++) {
+			auto& current = func.instructions[i];
+			if (func.instructions[i]->tag() == +InsnTag::V_SETERRLAB) {
+				error_label = ((SetErrorLabelIns*)func.instructions[i].get())->target;
+			}
+			else {
+				if (!func.instructions[i]->control_leaves()) {
+					auto& nextins = func.instructions[i + 1];
+					prev[nextins.get()].push_back(current.get());
+					next[current.get()].push_back(nextins.get());
+				}
+				if (error_label) {
+					prev[error_label].push_back(current.get());
+					next[current.get()].push_back(error_label);
+				}
+				opinfo_fill.clear();
+				current->fill_operand_info(opinfo_fill);
+				for (auto& info : opinfo_fill) {
+					if (info.kind == +OperandKind::JumpLabel) {
+						prev[*info.label].push_back(current.get());
+						next[current.get()].push_back(*info.label);
+					}
+				}
+			}
+		}
+		std::queue<Instruction*> bfq;
+		std::set<Instruction*> book;
+		for (auto& insn : func.instructions) {
+			if (insn->tag() == +InsnTag::RETURN) {
+				book.insert(insn.get());
+				bfq.push(insn.get());
+			}
+		}
+		while (book.size()) {
+			auto current = bfq.front();
+			bfq.pop();
+			book.erase(current);
+			opinfo_fill.clear();
+			current->fill_operand_info(opinfo_fill);
+			std::set<int> new_result;
+			for (auto succ : next[current]) {
+				for (auto v : result[succ])
+					new_result.insert(v);
+			}
+			for (auto& info : opinfo_fill) {
+				if (info.kind == +OperandKind::Use) {
+					new_result.insert(info.local);
+				}
+				else if (info.kind == +OperandKind::Def) {
+					new_result.erase(info.local);
+				}
+			}
+			if (result[current] != new_result) {
+				result[current] = std::move(new_result);
+				for (auto prec : prev[current]) {
+					if (!book.count(prec)) {
+						book.insert(prec);
+						bfq.push(prec);
+					}
+				}
+			}
+		}
+		// result is at beginning of each insn.
+		return result;
 	}
 	std::map<int, int> intra_procedure_type_infer(Function& func, const std::map<int, int>& assumptions) {
 		std::map<int, int> results = assumptions;
@@ -159,8 +232,10 @@ namespace yapyjit {
 		 * 3. Need to couple with more precise dce to make it fast in almost all cases.
 		 */
 		std::list<Instruction*> temp_insns_opt;
-		std::list<Instruction*> temp_insns_deopt;
 		std::list<Instruction*> temp_insns_unopt;
+		auto deopt_label = new LabelIns();
+		std::vector<LabelIns*> unopt_labels;
+		unopt_labels.push_back(new LabelIns());
 		std::map<LabelIns*, LabelIns*> label_translation_map;
 		for (auto& insn : self->compiled->instructions) {
 			if (insn->tag() == +InsnTag::LABEL) {
@@ -171,17 +246,10 @@ namespace yapyjit {
 		for (int i = 1; i <= self->compiled->nargs; i++) {
 			if (ty_inf[i] == TYI_FLOAT_FLAG) {
 				temp_insns_opt.push_back(new UnboxIns(i, BoxMode::f));
-				auto deopt_label = new LabelIns();
-				temp_insns_opt.push_back(new CheckDeoptIns(deopt_label));
-				temp_insns_deopt.push_back(deopt_label);
-				for (int j = 1; j < i; j++) {
-					if (ty_inf[j] == TYI_FLOAT_FLAG)
-						temp_insns_deopt.push_back(new BoxIns(j, BoxMode::f));
-				}
-				temp_insns_deopt.push_back(new JumpIns(jmp_label_start));
 			}
 		}
-		temp_insns_unopt.push_back(jmp_label_start);
+		temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, 0));
+		temp_insns_unopt.push_back(unopt_labels[0]);
 
 		for (auto& insn : self->compiled->instructions) {
 			switch (insn->tag()) {
@@ -242,48 +310,51 @@ namespace yapyjit {
 				}
 			}
 			temp_insns_opt.push_back(copy);
-			for (const auto& op : opinfo) {
-				if (op.kind == +OperandKind::Use) {
-					if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
-						temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
+			bool need_deopt = false;
+			if (copy->tag() != +InsnTag::RETURN) {
+				for (const auto& op : opinfo) {
+					if (op.kind == +OperandKind::Use) {
+						if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
+							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
+							need_deopt = true;
+						}
+					}
+				}
+				for (const auto& op : opinfo) {
+					if (op.kind == +OperandKind::Def) {
+						if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
+							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
+							need_deopt = true;
+						}
 					}
 				}
 			}
-			LabelIns* deopt_label = nullptr;
-			for (const auto& op : opinfo) {
-				if (op.kind == +OperandKind::Def) {
-					if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
-						temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
-						if (!deopt_label) deopt_label = new LabelIns();
-						temp_insns_opt.push_back(new CheckDeoptIns(deopt_label));
-					}
-				}
+			if (need_deopt) {
+				temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, unopt_labels.size()));
+				unopt_labels.push_back(new LabelIns());
 			}
-			if (deopt_label) {
-				temp_insns_deopt.push_back(deopt_label);
-				for (const auto& deopt_pair : ty_inf) {
-					if (deopt_pair.second == TYI_FLOAT_FLAG) {
-						temp_insns_deopt.push_back(new BoxIns(deopt_pair.first, BoxMode::f));
-					}
-				}
-				auto jmp_label = new LabelIns();
-				temp_insns_deopt.push_back(new JumpIns(jmp_label));
-				temp_insns_unopt.push_back(insn.release());
-				temp_insns_unopt.push_back(jmp_label);
+			temp_insns_unopt.push_back(insn.release());
+			if (need_deopt) {
+				temp_insns_unopt.push_back(unopt_labels[unopt_labels.size() - 1]);
 			}
-			else
-				temp_insns_unopt.push_back(insn.release());
 		}
 		self->compiled->instructions.clear();
 		for (auto insn : temp_insns_opt) {
 			self->compiled->instructions.push_back(std::unique_ptr<Instruction>(insn));
 		}
-		for (auto insn : temp_insns_deopt) {
-			self->compiled->instructions.push_back(std::unique_ptr<Instruction>(insn));
+		self->compiled->new_insn(deopt_label);
+		for (const auto& deopt_pair : ty_inf) {
+			if (deopt_pair.second == TYI_FLOAT_FLAG) {
+				self->compiled->new_insn(new BoxIns(deopt_pair.first, BoxMode::f));
+			}
 		}
+		self->compiled->new_insn(new SwitchDeoptIns(unopt_labels));
 		for (auto insn : temp_insns_unopt) {
 			self->compiled->instructions.push_back(std::unique_ptr<Instruction>(insn));
 		}
+		self->compiled->peephole();
+		self->compiled->dce();
+		self->compiled->dce();
 		auto t1 = std::chrono::high_resolution_clock::now();
 		if (recompile_debug_enabled) {
 			printf("\n");
@@ -292,12 +363,22 @@ namespace yapyjit {
 			PyObject_Print(wf_ir(self, nullptr), stdout, Py_PRINT_RAW);
 		}
 		auto t2 = std::chrono::high_resolution_clock::now();
-		self->generated = yapyjit::generate_mir(*self->compiled);
+		auto gening = yapyjit::generate_mir(*self->compiled);
+		auto do_link = [self, gening, t2] {
+			MIR_link(self->compiled->mir_ctx->ctx, MIR_set_gen_interface, nullptr);
+			self->generated = gening;
+			self->tier = 2;
+			if (recompile_debug_enabled) {
+				auto t4 = std::chrono::high_resolution_clock::now();
+				printf("Total emission time: %.2f ms\n", (t4 - t2).count() / 1000000.0);
+			}
+		};
+		std::thread generator(do_link);
+		generator.detach();
 		auto t3 = std::chrono::high_resolution_clock::now();
 		if (recompile_debug_enabled) {
 			printf("Recompilation time: %.2f ms\n", (t1 - t0).count() / 1000000.0);
-			printf("Emission time: %.2f ms\n", (t3 - t2).count() / 1000000.0);
+			printf("Sync emission time: %.2f ms\n", (t3 - t2).count() / 1000000.0);
 		}
-		self->tier = 2;
 	}
 }

@@ -74,6 +74,7 @@ namespace yapyjit {
 		O_UNBOX,
 		O_BOX,
 		O_CHECKDEOPT,
+		O_SWITCHDEOPT,
 		// C_ insns will not exist before combining insns/peephole opt
 		// We do not need to include these in analysis
 		// Update: it is a JIT and during recompilation perhaps we need
@@ -597,11 +598,29 @@ namespace yapyjit {
 	class CheckDeoptIns : public InsnWithTag<InsnTag::O_CHECKDEOPT> {
 	public:
 		LabelIns* target;
-		CheckDeoptIns(LabelIns* target_) : target(target_) {}
+		int switcher;
+		CheckDeoptIns(LabelIns* target_, int switcher_) : target(target_), switcher(switcher_) {}
 		virtual std::string pretty_print() {
-			return "chkdeopt " + target->pretty_print();
+			return "chkdeopt " + target->pretty_print() + ", " + std::to_string(switcher);
 		}
 		YAPYJIT_IR_COMMON(CheckDeoptIns);
+	};
+	class SwitchDeoptIns : public InsnWithTag<InsnTag::O_SWITCHDEOPT> {
+	public:
+		std::vector<LabelIns*> targets;
+		SwitchDeoptIns(const std::vector<LabelIns*>& targets_) : targets(targets_) {}
+		SwitchDeoptIns(std::vector<LabelIns*>&& targets_) : targets(targets_) {}
+		virtual std::string pretty_print() {
+			std::string s = "switchdeopt ";
+			bool first = true;
+			for (auto target : targets) {
+				if (!first) s += ", ";
+				first = false;
+				s += target->pretty_print();
+			}
+			return s;
+		}
+		YAPYJIT_IR_COMMON(SwitchDeoptIns);
 	};
 
 	class DefUseResult {

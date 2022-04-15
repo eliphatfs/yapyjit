@@ -62,9 +62,12 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<Instruction>> new_instructions;
 		DefUseResult defuse = loc_defuse();
 
-		// lda, call -> call_mthd
 		size_t i;
+		auto skip_set = std::make_unique<bool[]>(instructions.size());
+		std::vector<OperandInfo> opinfo_fill;
+		LabelIns* error_label = nullptr;
 		for (i = 0; i + 1 < instructions.size(); i++) {
+			// lda, call -> call_mthd
 			if (instructions[i]->tag() == +InsnTag::LOADATTR
 				&& instructions[i + 1]->tag() == +InsnTag::CALL) {
 				auto lda = (LoadAttrIns*)instructions[i].get();
@@ -84,8 +87,8 @@ namespace yapyjit {
 			else if (instructions[i]->tag() == +InsnTag::JUMPTRUTHY) {
 				auto jt = (JumpTruthyIns*)instructions[i].get();
 				auto flag = true;
-				for (auto use : defuse.use[jt->cond]) {
-					if (use->tag() != +InsnTag::COMPARE) {
+				for (auto def : defuse.def[jt->cond]) {
+					if (def->tag() != +InsnTag::COMPARE) {
 						flag = false;
 						break;
 					}
@@ -93,13 +96,48 @@ namespace yapyjit {
 				if (flag) {
 					new_instructions.push_back(std::unique_ptr<Instruction>(
 						new JumpTrueFastIns(jt->target, jt->cond)
-						));
+					));
 					continue;
 				}
 			}
-			new_instructions.push_back(std::move(instructions[i]));
+			else if (instructions[i]->tag() == +InsnTag::V_SETERRLAB) {
+				error_label = ((SetErrorLabelIns*)instructions[i].get())->target;
+			}
+			else if (instructions[i]->tag() == +InsnTag::O_UNBOX && !error_label) {
+				auto loc = ((UnboxIns*)instructions[i].get())->dst;
+				for (size_t j = i + 1; j < instructions.size(); j++) {
+					opinfo_fill.clear();
+					instructions[j]->fill_operand_info(opinfo_fill);
+					if (instructions[j]->tag() == +InsnTag::O_CHECKDEOPT)
+						continue;
+					if (instructions[j]->tag() == +InsnTag::LABEL)
+						goto END;
+					if (instructions[j]->tag() == +InsnTag::RETURN) {
+						skip_set[i] = true;
+						if (instructions[i + 1]->tag() == +InsnTag::O_CHECKDEOPT)
+							skip_set[i + 1] = true;
+						goto END;
+					}
+					for (auto& operand : opinfo_fill) {
+						if (operand.kind == +OperandKind::JumpLabel) {
+							goto END;
+						}
+						if (operand.kind == +OperandKind::Use && operand.local == loc) {
+							if (instructions[j]->tag() == +InsnTag::O_BOX) {
+								skip_set[i] = skip_set[j] = true;
+								if (instructions[i + 1]->tag() == +InsnTag::O_CHECKDEOPT)
+									skip_set[i + 1] = true;
+							}
+							goto END;
+						}
+					}
+				}
+			END:;
+			}
+			if (!skip_set[i])
+				new_instructions.push_back(std::move(instructions[i]));
 		}
-		if (i < instructions.size())
+		if (i < instructions.size() && !skip_set[i])
 			new_instructions.push_back(std::move(instructions[i]));
 		instructions.swap(new_instructions);
 	}

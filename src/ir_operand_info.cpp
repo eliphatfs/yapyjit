@@ -118,4 +118,10 @@ namespace yapyjit {
 		orig_lda->fill_operand_info(fill);
 		orig_call->fill_operand_info(fill);
 	}
+
+	void SwitchDeoptIns::fill_operand_info(std::vector<OperandInfo>& fill) {
+		for (auto& target : targets) {
+			fill.push_back(OperandInfo(OperandKind::JumpLabel, target));
+		}
+	}
 }
