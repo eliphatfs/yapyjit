@@ -71,7 +71,6 @@ namespace yapyjit {
 	IRG_OPERAND_INFO_1USE(StoreClosureIns, src)
 	IRG_OPERAND_INFO_EMPTY(ErrorPropIns)
 	IRG_OPERAND_INFO_EMPTY(ClearErrorCtxIns)
-	IRG_OPERAND_INFO_EMPTY(SetErrorLabelIns)
 	IRG_OPERAND_INFO_EMPTY(EpilogueIns)
 	IRG_OPERAND_INFO_1DEF_1USE(UnboxIns, dst, dst)
 	IRG_OPERAND_INFO_1DEF_1USE(BoxIns, dst, dst)
@@ -85,6 +84,12 @@ namespace yapyjit {
 		fill.push_back(OperandInfo(OperandKind::Def, dst));
 		if (ty != -1)
 			fill.push_back(OperandInfo(OperandKind::Use, ty));
+		fill.push_back(OperandInfo(OperandKind::JumpLabel, failjump));
+	}
+
+	void SetErrorLabelIns::fill_operand_info(std::vector<OperandInfo>& fill) {
+		if (target)
+			fill.push_back(OperandInfo(OperandKind::JumpLabel, target));
 	}
 
 	void BuildIns::fill_operand_info(std::vector<OperandInfo>& fill) {

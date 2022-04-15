@@ -4,6 +4,15 @@ namespace yapyjit {
 	void Function::dce() {
 		std::vector<std::unique_ptr<Instruction>> new_instructions;
 		bool dc_region = false;
+		std::vector<OperandInfo> opinfo;
+		std::set<LabelIns*> used_labels;
+		for (auto& insn : instructions) {
+			opinfo.clear();
+			insn->fill_operand_info(opinfo);
+			for (auto& info : opinfo)
+				if (info.kind == +OperandKind::JumpLabel)
+					used_labels.insert(*info.label);
+		}
 		for (auto& insn : instructions) {
 			auto tag = insn->tag();
 			if (insn->control_leaves()) {
@@ -11,7 +20,9 @@ namespace yapyjit {
 				dc_region = true;
 			}
 			else if (tag == +InsnTag::LABEL) {
-				dc_region = false;
+				if (used_labels.count((LabelIns*)insn.get()))
+					dc_region = false;
+				else continue;
 			}
 			if (!dc_region
 				|| tag == +InsnTag::V_SETERRLAB
