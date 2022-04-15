@@ -177,11 +177,11 @@ namespace yapyjit {
 	public:
 		int dst;
 		int src;
-		enum { GENERIC, FLOAT } mode;
+		enum { GENERIC, LONG, FLOAT } mode;
 		MoveIns(int dst_local_id, int src_local_id)
 			: dst(dst_local_id), src(src_local_id), mode(GENERIC) {}
 		virtual std::string pretty_print() {
-			const char* modeid = "gf";
+			const char* modeid = "glf";
 			return "mov" + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
 				+ " $" + std::to_string(dst) + " <- $" + std::to_string(src);
 		}
@@ -223,10 +223,12 @@ namespace yapyjit {
 	public:
 		int dst, left, right;
 		OpCmp op;
+		enum { GENERIC, LONG, FLOAT } mode;
 		CompareIns(int dst_local_id, OpCmp op_, int left_local_id, int right_local_id)
-			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_) {}
+			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_), mode(GENERIC) {}
 		virtual std::string pretty_print() {
-			return std::string(op._to_string())
+			const char* modeid = "glf";
+			return std::string(op._to_string()) + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}

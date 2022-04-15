@@ -264,6 +264,18 @@ namespace yapyjit {
 				}
 				break;
 			}
+			case InsnTag::COMPARE: {
+				auto insn_b = (CompareIns*)insn.get();
+				if (ty_inf[insn_b->left] == TYI_FLOAT_FLAG && ty_inf[insn_b->right] == TYI_FLOAT_FLAG) {
+					auto opt = (CompareIns*)insn_b->deepcopy();
+					opt->mode = CompareIns::FLOAT;
+					temp_insns_opt.push_back(opt);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
+				}
+				break;
+
+			}
 			case InsnTag::MOVE: {
 				auto insn_b = (MoveIns*)insn.get();
 				if (ty_inf[insn_b->dst] == TYI_FLOAT_FLAG && ty_inf[insn_b->src] == TYI_FLOAT_FLAG) {
@@ -291,6 +303,8 @@ namespace yapyjit {
 				temp_insns_unopt.push_back(insn.release());
 				continue;
 			}
+			default:
+				break;
 			}
 			std::vector<OperandInfo> opinfo, opinfo2;
 			insn->fill_operand_info(opinfo);

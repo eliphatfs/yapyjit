@@ -3,6 +3,7 @@
 #include <pybind_jitted_func.h>
 #include <ir.h>
 #include <sstream>
+#include <chrono>
 #include "structmember.h"
 
 static PyObject*
@@ -166,6 +167,7 @@ typedef PyObject* (*_yapyjit_fastercall) (JittedFuncObject*, PyObject* const*);
 
 static PyObject*
 wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
+    auto t0 = std::chrono::high_resolution_clock::now();
     Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
     auto callargs = args;
     auto posargs = PyVectorcall_NARGS(nargsf);
@@ -213,6 +215,11 @@ wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObje
         }
     }
     auto result = ((_yapyjit_fastercall)(self->generated->addr))(self, callargs);
+    if (yapyjit::time_profiling_enabled) {
+        auto& pair = yapyjit::time_profile_data[yapyjit::ManagedPyo(self->wrapped, true).attr("__qualname__").to_cstr()];
+        pair.second += (std::chrono::high_resolution_clock::now() - t0).count() / 1000000.0;
+        pair.first += 1;
+    }
     return result;
 }
 

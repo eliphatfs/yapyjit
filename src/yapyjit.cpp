@@ -1,5 +1,7 @@
 #include <Python.h>
 #include <memory>
+#include <iomanip>
+#include <cmath>
 #include <sstream>
 #include <yapyjit.h>
 #include <exc_helper.h>
@@ -8,6 +10,8 @@
 using namespace yapyjit;
 
 bool yapyjit::recompile_debug_enabled = false;
+bool yapyjit::time_profiling_enabled = false;
+std::map<std::string, std::pair<int, double>> yapyjit::time_profile_data;
 
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
 \
@@ -97,6 +101,37 @@ PyObject* yapyjit_enable_recompile_debug(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(yapyjit_enable_profiling_debug_doc, "set_profiling_enabled(enabled)\
+\
+Enable/Disable collecting of basic timing stats.");
+
+PyObject* yapyjit_enable_profiling(PyObject* self, PyObject* args) {
+    PyObject* thearg = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &thearg)) {
+        return nullptr;
+    }
+    yapyjit::time_profiling_enabled = PyObject_IsTrue(thearg);
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(yapyjit_print_profiling_data_doc, "print_profiling_data()\
+\
+Print collected timing stats (returns as a string).");
+
+PyObject* yapyjit_print_profiling_data(PyObject* self, PyObject* args) {
+    std::stringstream ss;
+    ss << std::left << std::fixed << std::showpoint << std::setprecision(2);
+    auto max_w = 0;
+    for (const auto& pair : time_profile_data) {
+        max_w = std::max(max_w, (int)pair.first.length());
+    }
+    ss << std::setw(max_w) << "name" << " " << std::setw(9) << "count" << " " << std::setw(12) << "time (ms)" << std::endl;
+    for (const auto& pair : time_profile_data) {
+        ss << std::setw(max_w) << pair.first << " " << std::setw(9) << pair.second.first << " " << std::setw(12) << pair.second.second << std::endl;
+    }
+    return PyUnicode_FromString(ss.str().c_str());
+}
+
 /*
  * List of functions to add to yapyjit in exec_yapyjit().
  */
@@ -104,6 +139,8 @@ static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
     { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
     { "set_recompile_debug_enabled", (PyCFunction)yapyjit_enable_recompile_debug, METH_VARARGS, yapyjit_enable_recompile_debug_doc },
+    { "set_profiling_enabled", (PyCFunction)yapyjit_enable_profiling, METH_VARARGS, yapyjit_enable_profiling_debug_doc },
+    { "print_profiling_data", (PyCFunction)yapyjit_print_profiling_data, METH_VARARGS, yapyjit_print_profiling_data_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 

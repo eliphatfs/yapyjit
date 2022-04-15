@@ -8,8 +8,13 @@ import unittest
 
 
 # input("Press Enter to continue...")
-# import yapyjit
+import yapyjit
 # yapyjit.set_recompile_debug_enabled(True)
+# yapyjit.set_profiling_enabled(True)
 print("Python", sys.version)
 __unittest = True
-unittest.main(module=None, argv=['unittest', 'discover', '-v'])
+try:
+    unittest.main(module=None, argv=['unittest', 'discover', '-v'])
+finally:
+    pass
+    # print(yapyjit.print_profiling_data())
