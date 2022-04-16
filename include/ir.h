@@ -232,6 +232,7 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
+		virtual void cmp_emit_float(Function* func);
 		YAPYJIT_IR_COMMON(CompareIns);
 	};
 

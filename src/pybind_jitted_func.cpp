@@ -216,8 +216,9 @@ wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObje
     }
     auto result = ((_yapyjit_fastercall)(self->generated->addr))(self, callargs);
     if (yapyjit::time_profiling_enabled) {
+        auto t1 = std::chrono::high_resolution_clock::now();
         auto& pair = yapyjit::time_profile_data[yapyjit::ManagedPyo(self->wrapped, true).attr("__qualname__").to_cstr()];
-        pair.second += (std::chrono::high_resolution_clock::now() - t0).count() / 1000000.0;
+        pair.second += (t1 - t0).count() / 1000000.0;
         pair.first += 1;
     }
     return result;

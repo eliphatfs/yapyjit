@@ -6,6 +6,7 @@
 
 namespace yapyjit {
 	inline void gen_update_type_trace(Function * func, int dst) {
+		if (!func->tracing_enabled_p) return;
 		auto obj = func->emit_ctx->get_reg(dst);
 		std::unique_ptr<TypeTraceEntry>& entry = func->insn_type_trace_entries[dst];
 		if (!entry)
@@ -247,8 +248,39 @@ namespace yapyjit {
 		}
 		emit_error_check(func, target);
 	}
+#define GEN_CMP_FLOAT_FAST(op, iop) case op: { \
+	auto label = emit_ctx->new_label(); \
+	emit_ctx->append_insn(MIR_MOV, { target, (intptr_t)Py_True }); \
+	emit_ctx->append_insn(iop, { label, a, b }); \
+	emit_ctx->append_insn(MIR_MOV, { target, (intptr_t)Py_False }); \
+	emit_ctx->append_label(label); \
+} break;
+	void CompareIns::cmp_emit_float(Function* func) {
+		auto emit_ctx = func->emit_ctx.get();
+		auto target = emit_ctx->get_reg(dst);
+		auto a = emit_ctx->get_reg_variant(left, "f", MIR_T_D);
+		auto b = emit_ctx->get_reg_variant(right, "f", MIR_T_D);
+		emit_disown(emit_ctx, target);
+		switch (op) {
+			GEN_CMP_FLOAT_FAST(OpCmp::Eq, MIR_DBEQ);
+			GEN_CMP_FLOAT_FAST(OpCmp::Gt, MIR_DBGT);
+			GEN_CMP_FLOAT_FAST(OpCmp::GtE, MIR_DBGE);
+			GEN_CMP_FLOAT_FAST(OpCmp::Lt, MIR_DBLT);
+			GEN_CMP_FLOAT_FAST(OpCmp::LtE, MIR_DBLE);
+			GEN_CMP_FLOAT_FAST(OpCmp::NotEq, MIR_DBNE);
+			GEN_CMP_FLOAT_FAST(OpCmp::Is, MIR_DBEQ);
+			GEN_CMP_FLOAT_FAST(OpCmp::IsNot, MIR_DBNE);
+		default:
+			throw std::runtime_error("Unreachable! CompareIns::cmp_emit_float");
+		}
+		emit_newown(emit_ctx, target);
+	}
 
 	void CompareIns::emit(Function* func) {
+		if (mode == FLOAT) {
+			cmp_emit_float(func);
+			return;
+		}
 		auto emit_ctx = func->emit_ctx.get();
 		auto target = emit_ctx->get_reg(dst);
 		auto a = emit_ctx->get_reg(left);
