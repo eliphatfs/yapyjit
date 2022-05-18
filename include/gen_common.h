@@ -83,6 +83,17 @@ namespace yapyjit {
 		});
 	}
 
+	void debug_print_novisit(PyObject* pyo) {
+		printf("\ndebug_print: object at %p\n", pyo);
+	}
+
+	inline void emit_debug_print_novisit(MIRFunction* func, MIROp prt) {
+		func->append_insn(MIR_CALL, {
+			func->parent->new_proto(MIRType<void>::t, { MIR_T_P }),
+			(intptr_t)debug_print_novisit, prt
+		});
+	}
+
 	inline MIRLabelOp ensure_label(Function* func, LabelIns* label) {
 		auto it = func->emit_label_map.find(label);
 		if (it != func->emit_label_map.end()) {
@@ -103,6 +114,19 @@ namespace yapyjit {
 	inline void emit_error_check(Function* ctx, MIROp target) {
 		auto emit_ctx = ctx->emit_ctx.get();
 		auto end_label = emit_jump_if(emit_ctx, target);
+		emit_ctx->append_insn(MIR_MOV, { ctx->return_reg, (intptr_t)nullptr });
+		emit_ctx->append_insn(MIR_JMP, { ctx->error_label });
+		emit_ctx->append_label(end_label);
+	}
+
+	inline void emit_error_check_generic(Function* ctx) {
+		auto emit_ctx = ctx->emit_ctx.get();
+		auto err = emit_ctx->new_temp_reg(MIR_T_I64);
+		emit_ctx->append_insn(MIR_CALL, {
+			emit_ctx->parent->new_proto(MIR_T_I64, { }),
+			(int64_t)PyErr_Occurred, err
+		});
+		auto end_label = emit_jump_if_not(emit_ctx, err);
 		emit_ctx->append_insn(MIR_MOV, { ctx->return_reg, (intptr_t)nullptr });
 		emit_ctx->append_insn(MIR_JMP, { ctx->error_label });
 		emit_ctx->append_label(end_label);

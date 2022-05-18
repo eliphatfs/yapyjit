@@ -289,7 +289,7 @@ namespace yapyjit {
 			}
 			case InsnTag::LOADITEM: {
 				auto insn_b = (LoadItemIns*)insn.get();
-				if (ty_inf[insn_b->src] == TYI_LIST_FLAG) {
+				if (ty_inf[insn_b->src] == TYI_LIST_FLAG && ty_inf[insn_b->subscr] == TYI_LONG_FLAG) {
 					insn_b->emit_mode = LoadItemIns::PREFER_LIST;
 				}
 				break;

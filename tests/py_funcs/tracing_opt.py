@@ -54,3 +54,40 @@ def float_fast_ops_driver():
     for i in range(3, 11, 3):
         a.append(float_fast_ops(float(i), float(i - 1)))
     return a
+
+
+def list_index_fast(a, b):
+    return a[b]
+
+
+def list_index_fast_driver():
+    a = [0, 3, 4]
+    r = []
+    for i in range(64):
+        list_index_fast(a, 2)
+    time.sleep(0.15)
+    if isinstance(list_index_fast, yapyjit.JittedFunc):
+        if list_index_fast.tier < 2:
+            raise ValueError("Error: list_index_fast.tier < 2", list_index_fast.tier)
+    for i in range(32):
+        r.append(list_index_fast(a, i % 3))
+    for i in range(32):
+        r.append(list_index_fast(a, -(i % 3)))
+    return r
+
+
+def list_index_error_driver():
+    a = [0, 3, 4]
+    r = []
+    for i in range(64):
+        list_index_fast(a, 2)
+    time.sleep(0.15)
+    if isinstance(list_index_fast, yapyjit.JittedFunc):
+        if list_index_fast.tier < 2:
+            raise ValueError("Error: list_index_fast.tier < 2", list_index_fast.tier)
+    try:
+        r.append(list_index_fast(a, -20))
+    except IndexError:
+        return 0
+    # TODO: handle index overflow correctly
+    return 1

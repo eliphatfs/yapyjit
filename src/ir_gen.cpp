@@ -412,7 +412,7 @@ namespace yapyjit {
 		gen_update_type_trace(func, dst);
 	}
 
-	void LoadItemIns::emit(Function* func) {
+	void LoadItemIns::emit_generic(Function* func) {
 		auto source = func->emit_ctx->get_reg(src);
 		auto target = func->emit_ctx->get_reg(dst);
 		auto sub = func->emit_ctx->get_reg(subscr);
@@ -424,6 +424,68 @@ namespace yapyjit {
 		});
 		// func->emit_ctx->append_label(end_label);
 		emit_error_check(func, target);
+	}
+
+	void LoadItemIns::emit(Function* func) {
+		if (emit_mode == GENERIC) {
+			emit_generic(func);
+		}
+		else if (emit_mode == PREFER_LIST) {
+			auto source = func->emit_ctx->get_reg(src);
+			auto target = func->emit_ctx->get_reg(dst);
+			auto sub = func->emit_ctx->get_reg(subscr);
+			auto slow_path = func->emit_ctx->new_label();
+			auto end_label = func->emit_ctx->new_label();
+			func->emit_ctx->append_insn(MIR_BNE, {
+				slow_path, (intptr_t)&PyList_Type,
+				MIRMemOp(MIR_T_P, source, offsetof(PyObject, ob_type))
+			});
+			auto sub_idx_reg = func->emit_ctx->new_temp_reg(MIR_T_I64);
+			func->emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIR_T_I64, { MIR_T_P }),
+				(int64_t)PyLong_AsLongLong, sub_idx_reg, sub
+			});
+			auto skip_err_chk = func->emit_ctx->new_label();
+			func->emit_ctx->append_insn(MIR_BNE, {
+				skip_err_chk, sub_idx_reg, -1
+			});
+			emit_error_check_generic(func);
+			func->emit_ctx->append_label(skip_err_chk);
+			emit_disown(func->emit_ctx.get(), target);
+			auto size_reg = func->emit_ctx->new_temp_reg(MIR_T_I64);
+			func->emit_ctx->append_insn(MIR_MOV, {
+				size_reg,
+				MIRMemOp(MIR_T_P, source, offsetof(PyVarObject, ob_size))
+			});
+			auto skip_adjust_negidx = func->emit_ctx->new_label();
+			func->emit_ctx->append_insn(MIR_BGE, {
+				skip_adjust_negidx, sub_idx_reg, 0
+			});
+			func->emit_ctx->append_insn(MIR_ADD, {
+				sub_idx_reg, sub_idx_reg, size_reg
+			});
+			func->emit_ctx->append_label(skip_adjust_negidx);
+			func->emit_ctx->append_insn(MIR_BGE, {
+				slow_path, sub_idx_reg, size_reg
+			});
+			func->emit_ctx->append_insn(MIR_BLT, {
+				slow_path, sub_idx_reg, 0
+			});
+			func->emit_ctx->append_insn(MIR_MOV, {
+				target,
+				MIRMemOp(MIR_T_P, source, offsetof(PyListObject, ob_item))
+			});
+			func->emit_ctx->append_insn(MIR_MOV, {
+				target,
+				MIRMemOp(MIR_T_P, target, 0, sub_idx_reg, sizeof(PyObject*))
+			});
+			emit_error_check(func, target);
+			emit_newown(func->emit_ctx.get(), target);
+			func->emit_ctx->append_insn(MIR_JMP, { end_label });
+			func->emit_ctx->append_label(slow_path);
+			emit_generic(func);
+			func->emit_ctx->append_label(end_label);
+		}
 	}
 
 	void StoreItemIns::emit(Function* func) {
@@ -905,18 +967,23 @@ namespace yapyjit {
 
 	void UnboxIns::emit(Function* func) {
 		auto emit_ctx = func->emit_ctx.get();
-		if (mode == +BoxMode::f) {
+		auto isf = mode == +BoxMode::f;
+		if (mode == +BoxMode::f || mode == +BoxMode::i) {
 			auto set_deopt_reg = emit_ctx->new_label();
 			auto end = emit_ctx->new_label();
 			emit_ctx->append_insn(MIR_BNE, {
 				set_deopt_reg,
 				MIRMemOp(MIR_T_P, emit_ctx->get_reg(dst), offsetof(PyObject, ob_type)),
-				(intptr_t)&PyFloat_Type
+				isf ? (intptr_t)&PyFloat_Type : (intptr_t)&PyLong_Type
 			});
-			emit_ctx->append_insn(MIR_DMOV, {
-				emit_ctx->get_reg_variant(dst, "f", MIR_T_D),
-				MIRMemOp(MIR_T_D, emit_ctx->get_reg(dst), offsetof(PyFloatObject, ob_fval))
-			});
+			if (isf) {
+				emit_ctx->append_insn(MIR_DMOV, {
+					emit_ctx->get_reg_variant(dst, "f", MIR_T_D),
+					MIRMemOp(MIR_T_D, emit_ctx->get_reg(dst), offsetof(PyFloatObject, ob_fval))
+				});
+			}
+			else {  // BoxMode::i
+			}
 			emit_set_unbox_flag(func, dst);
 			emit_disown(emit_ctx, func->emit_ctx->get_reg(dst));
 			emit_ctx->append_insn(MIR_JMP, { end });

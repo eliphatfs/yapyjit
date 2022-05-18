@@ -319,6 +319,7 @@ namespace yapyjit {
 		enum { GENERIC, PREFER_LIST } emit_mode;
 		LoadItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
 			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id), emit_mode(GENERIC) {}
+		void emit_generic(Function* func);
 		virtual std::string pretty_print() {
 			return "ldi $" + std::to_string(dst)
 				+ " <- $" + std::to_string(src) + "[$" + std::to_string(subscr) + "]";
