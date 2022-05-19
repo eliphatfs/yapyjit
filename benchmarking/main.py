@@ -18,22 +18,22 @@ if __name__ == "__main__":
         for f in sorted(fs):
             if f.endswith(".py") and f.startswith("bm"):
                 fpath = os.path.join(root, f)
-                extra_flags = [] if f not in fast else ['--fast']
+                quick = f in fast
                 os.environ["YAPYJIT_EN"] = "ENABLE"
                 os.environ["YAPYJIT_FLAGS"] = "NOWARN"
                 common_args = [
                     sys.executable, fpath,
-                    "--copy-env",
+                    "--copy-env", '-p', ['6', '3'][quick], '-n', ['10', '5'][quick], '-w', ['5', '4'][quick],
                     "-o", os.path.join(res_dir, f + ".jit.json"),
                 ]
-                subprocess.run(common_args + extra_flags)
+                subprocess.run(common_args)
                 os.environ["YAPYJIT_EN"] = "DISABLE"
                 common_args = [
                     sys.executable, fpath,
-                    "--copy-env",
+                    "--copy-env", '-p', ['6', '3'][quick], '-n', ['10', '5'][quick], '-w', ['5', '4'][quick],
                     "-o", os.path.join(res_dir, f + ".nojit.json"),
                 ]
-                subprocess.run(common_args + extra_flags)
+                subprocess.run(common_args)
                 jit = pyperf.BenchmarkSuite.load(os.path.join(res_dir, f + ".jit.json"))
                 nojit = pyperf.BenchmarkSuite.load(os.path.join(res_dir, f + ".nojit.json"))
                 for bm in jit:
