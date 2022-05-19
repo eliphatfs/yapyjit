@@ -58,6 +58,18 @@ namespace yapyjit {
 		return result;
 	}
 
+	static PyObject* isinstance_wrapper(PyObject* self, PyObject* cls) {
+		switch (PyObject_IsInstance(self, cls))
+		{
+		case 1:
+			Py_RETURN_TRUE;
+		case 0:
+			Py_RETURN_FALSE;
+		default:
+			return nullptr;
+		}
+	}
+
 	void Function::peephole() {
 		std::vector<std::unique_ptr<Instruction>> new_instructions;
 		DefUseResult defuse = loc_defuse();
@@ -82,6 +94,56 @@ namespace yapyjit {
 					));
 					i++;
 					continue;
+				}
+			}
+			else if (instructions[i]->tag() == +InsnTag::CALL) {
+				auto call = (CallIns*)instructions[i].get();
+				if (call->kwargs.size() == 0 && defuse.def[call->func].size() == 1) {
+					PyObject* referee = nullptr;
+					PyObject* check = nullptr;
+					switch (defuse.def[call->func][0]->tag()) {
+					case InsnTag::CONSTANT:
+						referee = ((ConstantIns*)defuse.def[call->func][0])->obj.borrow();
+						break;
+					case InsnTag::LOADGLOBAL:
+						check = referee = ((LoadGlobalIns*)defuse.def[call->func][0])->bltin_cache_slot;
+						break;
+					}
+					if (referee == PyDict_GetItemString(PyEval_GetBuiltins(), "iter")) {
+						if (call->args.size() == 1) {
+							new_instructions.push_back(std::unique_ptr<Instruction>(
+								new CallNativeIns(call->dst, call->func, call->args, check, (void*)PyObject_GetIter, CallNativeIns::CCALL)
+							));
+							continue;
+						}
+					}
+					if (referee == PyDict_GetItemString(PyEval_GetBuiltins(), "isinstance")) {
+						if (call->args.size() == 2) {
+							new_instructions.push_back(std::unique_ptr<Instruction>(
+								new CallNativeIns(call->dst, call->func, call->args, check, (void*)isinstance_wrapper, CallNativeIns::CCALL)
+							));
+							continue;
+						}
+					}
+					if (referee && Py_TYPE(referee) == &PyCFunction_Type) {
+						auto ml = ((PyCFunctionObject*)referee)->m_ml;
+						auto flags = ml->ml_flags;
+						if (flags & METH_FASTCALL) {
+							new_instructions.push_back(std::unique_ptr<Instruction>(
+								new CallNativeIns(call->dst, call->func, call->args, referee, ml->ml_meth, CallNativeIns::VECTORCALL)
+							));
+							continue;
+						}
+					}
+					if (referee && PyType_Check(referee)) {
+						auto cfn = ((PyTypeObject*)referee)->tp_vectorcall;
+						if (cfn) {
+							new_instructions.push_back(std::unique_ptr<Instruction>(
+								new CallNativeIns(call->dst, call->func, call->args, referee, (void*)cfn, CallNativeIns::VECTORCALL)
+							));
+							continue;
+						}
+					}
 				}
 			}
 			else if (instructions[i]->tag() == +InsnTag::JUMPTRUTHY) {

@@ -80,6 +80,7 @@ namespace yapyjit {
 		// Update: it is a JIT and during recompilation perhaps we need
 		// these in analysis
 		C_CALLMTHD,
+		C_CALLNATIVE,
 		C_JUMPTRUEFAST,
 		// V_ virtual/special insns
 		V_SETERRLAB,
@@ -433,8 +434,16 @@ namespace yapyjit {
 	public:
 		int dst;
 		std::string name;
+		PyObject* bltin_cache_slot;
 		LoadGlobalIns(int dst_local_id, const std::string& name_)
 			: dst(dst_local_id), name(name_) {
+			auto blt = PyEval_GetBuiltins();
+			if (!blt) throw std::logic_error(__FUNCTION__" cannot get builtins.");
+			if (!PyDict_CheckExact(blt)) throw std::logic_error(__FUNCTION__" builtins is not a dict.");
+
+			// Assume builtins will not change.
+			auto hashee = ManagedPyo(PyUnicode_FromString(name.c_str()));
+			bltin_cache_slot = PyDict_GetItem(blt, hashee.borrow());
 		}
 		virtual std::string pretty_print() {
 			return "ldg $" + std::to_string(dst) + " <- " + name;
@@ -505,6 +514,29 @@ namespace yapyjit {
 			return res + ")";
 		}
 		YAPYJIT_IR_COMMON(CallIns);
+	};
+
+	class CallNativeIns : public InsnWithTag<InsnTag::C_CALLNATIVE> {
+	public:
+		int dst, func;
+		std::vector<int> args;
+		PyObject* eqcheck;
+		void* cfuncptr;
+		enum { VECTORCALL, CCALL } mode;
+		CallNativeIns(int dst_local_id, int func_local_id, const std::vector<int>& args_, PyObject* chk, void* cfuncaddr, decltype(mode) mode_)
+			: dst(dst_local_id), func(func_local_id), args(args_), eqcheck(chk), cfuncptr(cfuncaddr), mode(mode_) {
+		}
+		virtual std::string pretty_print() {
+			std::string res = "call.na $" + std::to_string(dst) + " <- $" + std::to_string(func) + "(";
+			bool first = true;
+			for (auto arg : args) {
+				if (!first) res += ", ";
+				first = false;
+				res += "$" + std::to_string(arg);
+			}
+			return res + ")";
+		}
+		YAPYJIT_IR_COMMON(CallNativeIns);
 	};
 
 	class CallMthdIns : public InsnWithTag<InsnTag::C_CALLMTHD> {

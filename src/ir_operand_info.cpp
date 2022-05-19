@@ -113,6 +113,13 @@ namespace yapyjit {
 			fill.push_back(OperandInfo(OperandKind::Use, pair.second));
 	}
 
+	void CallNativeIns::fill_operand_info(std::vector<OperandInfo>& fill) {
+		fill.push_back(OperandInfo(OperandKind::Def, dst));
+		fill.push_back(OperandInfo(OperandKind::Use, func));
+		for (auto arg : args)
+			fill.push_back(OperandInfo(OperandKind::Use, arg));
+	}
+
 	void CallMthdIns::fill_operand_info(std::vector<OperandInfo>& fill) {
 		// TODO: remove def and use of optimized var
 		orig_lda->fill_operand_info(fill);

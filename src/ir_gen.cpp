@@ -641,8 +641,8 @@ namespace yapyjit {
 			(int64_t)PyIter_Next, target, func->emit_ctx->get_reg(iter)
 		});
 		func->emit_ctx->append_insn(MIR_BF, { ensure_label(func, iterFailTo), target });
-	    gen_update_type_trace(func, dst);
 		emit_error_check(func, target);
+		gen_update_type_trace(func, dst);
 	}
 
 	void BuildIns::emit(Function* func) {
@@ -821,25 +821,19 @@ namespace yapyjit {
 		// Assume the namespace refer to the same object when compiling and execution.
 		// So the environ will keep a reference to globals.
 		auto glob = func->globals_ns.borrow();  // PyEval_GetGlobals();
-		auto blt = PyEval_GetBuiltins();
 		if (!glob) throw std::logic_error(__FUNCTION__" cannot get globals.");
 		if (!PyDict_CheckExact(glob)) throw std::logic_error(__FUNCTION__" globals() is not a dict.");
-		if (!blt) throw std::logic_error(__FUNCTION__" cannot get builtins.");
-		if (!PyDict_CheckExact(blt)) throw std::logic_error(__FUNCTION__" builtins is not a dict.");
 		auto hash_cache = PyUnicode_FromString(name.c_str());
 		func->emit_keeprefs.push_back(ManagedPyo(hash_cache));
 
 		emit_2pyo_call(
 			emit_ctx, (int64_t)PyDict_GetItem, target, (int64_t)glob, (int64_t)hash_cache
 		);
-
-		// Assume builtins will not change.
-		auto blt_get = PyDict_GetItem(blt, hash_cache);
-		if (blt_get) {
-			func->emit_keeprefs.push_back(ManagedPyo(blt_get, true));
+		if (bltin_cache_slot) {
+			func->emit_keeprefs.push_back(ManagedPyo(bltin_cache_slot, true));
 			auto skip_blt = emit_jump_if(emit_ctx, target);
 			emit_ctx->append_insn(MIR_MOV, {
-				target, (int64_t)blt_get
+				target, (int64_t)bltin_cache_slot
 			});
 			emit_ctx->append_label(skip_blt);
 		}
@@ -927,6 +921,49 @@ namespace yapyjit {
 
 		emit_call(ctx, target, pyfn, args, kwargs);
 		gen_update_type_trace(ctx, dst);
+	}
+
+	void CallNativeIns::emit(Function* ctx) {
+		auto emit_ctx = ctx->emit_ctx.get();
+		auto target = emit_ctx->get_reg(dst);
+		auto pyfn = emit_ctx->get_reg(func);
+		auto slowpath = emit_ctx->new_label();
+		auto endlabel = emit_ctx->new_label();
+		if (eqcheck) {
+			emit_ctx->append_insn(MIR_BNE, { slowpath, pyfn, (intptr_t)eqcheck });
+		}
+		if (mode == VECTORCALL) {
+			auto args_fill = (PyObject**)ctx->allocate_fill(args.size() * sizeof(PyObject*));
+			for (size_t i = 0; i < args.size(); i++) {
+				emit_ctx->append_insn(MIR_MOV, {
+					MIRMemOp(MIR_T_P, MIRRegOp(0), (intptr_t)(args_fill + i)),
+					ctx->emit_ctx->get_reg(args[i])
+				});
+			}
+			emit_ctx->append_insn(MIR_CALL, {
+				emit_ctx->parent->new_proto(MIR_T_P, { MIR_T_P, MIR_T_P, MIRType<size_t>::t, MIR_T_P }),
+				(intptr_t)cfuncptr, target, (intptr_t)eqcheck, (intptr_t)args_fill, (int64_t)args.size(), 0
+			});
+			emit_error_check(ctx, target);
+			gen_update_type_trace(ctx, dst);
+		}
+		else if (mode == CCALL) {
+			if (args.size() == 1) {
+				emit_1pyo_call(emit_ctx, (intptr_t)cfuncptr, target, emit_ctx->get_reg(args[0]));
+			}
+			else if (args.size() == 2) {
+				emit_2pyo_call(emit_ctx, (intptr_t)cfuncptr, target, emit_ctx->get_reg(args[0]), emit_ctx->get_reg(args[1]));
+			}
+			else throw std::logic_error("Unreachable in CallNativeIns::emit");
+			emit_error_check(ctx, target);
+		}
+		else throw std::logic_error("Unreachable in CallNativeIns::emit");
+		if (eqcheck) {
+			emit_ctx->append_insn(MIR_JMP, { endlabel });
+			emit_ctx->append_label(slowpath);
+			emit_call(ctx, target, pyfn, args, {});
+			emit_ctx->append_label(endlabel);
+		}
 	}
 
 	static int _PyObject_GetMethod_Copy(PyObject* obj, PyObject* name, PyObject** method) {
