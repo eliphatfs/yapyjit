@@ -167,7 +167,10 @@ typedef PyObject* (*_yapyjit_fastercall) (JittedFuncObject*, PyObject* const*);
 
 static PyObject*
 wf_fastcall(JittedFuncObject* self, PyObject* const* args, size_t nargsf, PyObject* kwnames) {
-    auto t0 = std::chrono::high_resolution_clock::now();
+    std::chrono::high_resolution_clock::time_point t0;
+    if (yapyjit::time_profiling_enabled) {
+        t0 = std::chrono::high_resolution_clock::now();
+    }
     Py_ssize_t nargs = (Py_ssize_t)self->defaults->size();
     auto callargs = args;
     auto posargs = PyVectorcall_NARGS(nargsf);
