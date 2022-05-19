@@ -202,6 +202,7 @@ namespace yapyjit {
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
 		void binop_emit_float(Function* func);
+		void binop_emit_long(Function* func);
 		YAPYJIT_IR_COMMON(BinOpIns);
 	};
 
@@ -232,7 +233,8 @@ namespace yapyjit {
 				+ " $" + std::to_string(dst)
 				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
 		}
-		virtual void cmp_emit_float(Function* func);
+		void cmp_emit_float(Function* func);
+		void cmp_emit_long(Function* func);
 		YAPYJIT_IR_COMMON(CompareIns);
 	};
 

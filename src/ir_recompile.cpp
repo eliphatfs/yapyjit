@@ -247,6 +247,9 @@ namespace yapyjit {
 			if (ty_inf[i] == TYI_FLOAT_FLAG) {
 				temp_insns_opt.push_back(new UnboxIns(i, BoxMode::f));
 			}
+			if (ty_inf[i] == TYI_LONG_FLAG) {
+				temp_insns_opt.push_back(new UnboxIns(i, BoxMode::i));
+			}
 		}
 		temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, 0));
 		temp_insns_unopt.push_back(unopt_labels[0]);
@@ -262,6 +265,33 @@ namespace yapyjit {
 					temp_insns_unopt.push_back(insn.release());
 					continue;
 				}
+				if (ty_inf[insn_b->left] == TYI_LONG_FLAG && ty_inf[insn_b->right] == TYI_LONG_FLAG) {
+					switch (insn_b->op) {
+					case Op2ary::Add:
+					case Op2ary::Sub:
+					case Op2ary::Mult: {
+						auto opt = (BinOpIns*)insn_b->deepcopy();
+						opt->mode = BinOpIns::LONG;
+						temp_insns_opt.push_back(opt);
+						temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, unopt_labels.size()));
+						unopt_labels.push_back(new LabelIns());
+						temp_insns_unopt.push_back(insn.release());
+						temp_insns_unopt.push_back(unopt_labels[unopt_labels.size() - 1]);
+						continue;
+					}
+					case Op2ary::FloorDiv:
+					case Op2ary::Mod:
+					case Op2ary::RShift: {
+						auto opt = (BinOpIns*)insn_b->deepcopy();
+						opt->mode = BinOpIns::LONG;
+						temp_insns_opt.push_back(opt);
+						temp_insns_unopt.push_back(insn.release());
+						continue;
+					}
+					default:
+						break;
+					}
+				}
 				break;
 			}
 			case InsnTag::COMPARE: {
@@ -269,6 +299,13 @@ namespace yapyjit {
 				if (ty_inf[insn_b->left] == TYI_FLOAT_FLAG && ty_inf[insn_b->right] == TYI_FLOAT_FLAG) {
 					auto opt = (CompareIns*)insn_b->deepcopy();
 					opt->mode = CompareIns::FLOAT;
+					temp_insns_opt.push_back(opt);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
+				}
+				if (ty_inf[insn_b->left] == TYI_LONG_FLAG && ty_inf[insn_b->right] == TYI_LONG_FLAG) {
+					auto opt = (CompareIns*)insn_b->deepcopy();
+					opt->mode = CompareIns::LONG;
 					temp_insns_opt.push_back(opt);
 					temp_insns_unopt.push_back(insn.release());
 					continue;
@@ -285,12 +322,26 @@ namespace yapyjit {
 					temp_insns_unopt.push_back(insn.release());
 					continue;
 				}
+				if (ty_inf[insn_b->dst] == TYI_LONG_FLAG && ty_inf[insn_b->src] == TYI_LONG_FLAG) {
+					auto opt = (MoveIns*)insn_b->deepcopy();
+					opt->mode = MoveIns::LONG;
+					temp_insns_opt.push_back(opt);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
+				}
 				break;
 			}
 			case InsnTag::LOADITEM: {
 				auto insn_b = (LoadItemIns*)insn.get();
 				if (ty_inf[insn_b->src] == TYI_LIST_FLAG && ty_inf[insn_b->subscr] == TYI_LONG_FLAG) {
-					insn_b->emit_mode = LoadItemIns::PREFER_LIST;
+					auto opt = (LoadItemIns*)insn_b->deepcopy();
+					opt->emit_mode = LoadItemIns::PREFER_LIST;
+					temp_insns_opt.push_back(opt);
+					temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, unopt_labels.size()));
+					unopt_labels.push_back(new LabelIns());
+					temp_insns_unopt.push_back(unopt_labels[unopt_labels.size() - 1]);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
 				}
 				break;
 			}
@@ -313,6 +364,9 @@ namespace yapyjit {
 					if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
 						temp_insns_opt.push_back(new BoxIns(op.local, BoxMode::f));
 					}
+					if (ty_inf[op.local] == TYI_LONG_FLAG) {
+						temp_insns_opt.push_back(new BoxIns(op.local, BoxMode::i));
+					}
 				}
 			}
 			auto copy = insn->deepcopy();
@@ -332,12 +386,20 @@ namespace yapyjit {
 							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
 							need_deopt = true;
 						}
+						if (ty_inf[op.local] == TYI_LONG_FLAG) {
+							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::i));
+							need_deopt = true;
+						}
 					}
 				}
 				for (const auto& op : opinfo) {
 					if (op.kind == +OperandKind::Def) {
 						if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
 							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
+							need_deopt = true;
+						}
+						if (ty_inf[op.local] == TYI_LONG_FLAG) {
+							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::i));
 							need_deopt = true;
 						}
 					}
@@ -361,6 +423,9 @@ namespace yapyjit {
 			if (deopt_pair.second == TYI_FLOAT_FLAG) {
 				self->compiled->new_insn(new BoxIns(deopt_pair.first, BoxMode::f));
 			}
+			if (deopt_pair.second == TYI_LONG_FLAG) {
+				self->compiled->new_insn(new BoxIns(deopt_pair.first, BoxMode::i));
+			}
 		}
 		self->compiled->new_insn(new SwitchDeoptIns(unopt_labels));
 		for (auto insn : temp_insns_unopt) {
@@ -379,7 +444,7 @@ namespace yapyjit {
 		auto t2 = std::chrono::high_resolution_clock::now();
 		auto gening = yapyjit::generate_mir(*self->compiled);
 		auto do_link = [self, gening, t2] {
-			self->compiled->mir_ctx->set_opt_level(2);
+			// self->compiled->mir_ctx->set_opt_level(2);
 			MIR_link(self->compiled->mir_ctx->ctx, MIR_set_gen_interface, nullptr);
 			self->generated = gening;
 			self->tier = 2;
