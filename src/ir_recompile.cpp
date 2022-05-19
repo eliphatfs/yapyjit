@@ -396,13 +396,16 @@ namespace yapyjit {
 			}
 			std::vector<OperandInfo> opinfo, opinfo2;
 			insn->fill_operand_info(opinfo);
+			std::set<int> book;
 			for (const auto& op : opinfo) {
 				if (op.kind == +OperandKind::Use) {
-					if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
+					if (ty_inf[op.local] == TYI_FLOAT_FLAG && !book.count(op.local)) {
 						temp_insns_opt.push_back(new BoxIns(op.local, BoxMode::f));
+						book.insert(op.local);
 					}
-					if (ty_inf[op.local] == TYI_LONG_FLAG) {
+					if (ty_inf[op.local] == TYI_LONG_FLAG && !book.count(op.local)) {
 						temp_insns_opt.push_back(new BoxIns(op.local, BoxMode::i));
+						book.insert(op.local);
 					}
 				}
 			}
@@ -416,28 +419,33 @@ namespace yapyjit {
 			}
 			temp_insns_opt.push_back(copy);
 			bool need_deopt = false;
+			book.clear();
 			if (copy->tag() != +InsnTag::RETURN) {
 				for (const auto& op : opinfo) {
 					if (op.kind == +OperandKind::Use) {
-						if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
+						if (ty_inf[op.local] == TYI_FLOAT_FLAG && !book.count(op.local)) {
 							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
 							need_deopt = true;
+							book.insert(op.local);
 						}
-						if (ty_inf[op.local] == TYI_LONG_FLAG) {
+						if (ty_inf[op.local] == TYI_LONG_FLAG && !book.count(op.local)) {
 							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::i));
 							need_deopt = true;
+							book.insert(op.local);
 						}
 					}
 				}
 				for (const auto& op : opinfo) {
 					if (op.kind == +OperandKind::Def) {
-						if (ty_inf[op.local] == TYI_FLOAT_FLAG) {
+						if (ty_inf[op.local] == TYI_FLOAT_FLAG && !book.count(op.local)) {
 							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::f));
 							need_deopt = true;
+							book.insert(op.local);
 						}
-						if (ty_inf[op.local] == TYI_LONG_FLAG) {
+						if (ty_inf[op.local] == TYI_LONG_FLAG && !book.count(op.local)) {
 							temp_insns_opt.push_back(new UnboxIns(op.local, BoxMode::i));
 							need_deopt = true;
+							book.insert(op.local);
 						}
 					}
 				}
