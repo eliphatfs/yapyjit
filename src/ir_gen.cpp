@@ -553,7 +553,6 @@ namespace yapyjit {
 				target,
 				MIRMemOp(MIR_T_P, target, 0, sub_idx_reg, sizeof(PyObject*))
 			});
-			emit_error_check(func, target);
 			emit_newown(func->emit_ctx.get(), target);
 			func->emit_ctx->append_insn(MIR_JMP, { end_label });
 			func->emit_ctx->append_label(slow_path);
@@ -563,13 +562,66 @@ namespace yapyjit {
 	}
 
 	void StoreItemIns::emit(Function* func) {
-		auto source = func->emit_ctx->get_reg(src);
-		auto target = func->emit_ctx->get_reg(dst);
-		auto sub = func->emit_ctx->get_reg(subscr);
-		func->emit_ctx->append_insn(MIR_CALL, {
-			func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
-			(int64_t)PyObject_SetItem, target, sub, source
-		});
+		if (emit_mode == GENERIC) {
+			auto source = func->emit_ctx->get_reg(src);
+			auto target = func->emit_ctx->get_reg(dst);
+			auto sub = func->emit_ctx->get_reg(subscr);
+			func->emit_ctx->append_insn(MIR_CALL, {
+				func->emit_ctx->parent->new_proto(MIRType<void>::t, { MIR_T_P, MIR_T_P, MIR_T_P }),
+				(int64_t)PyObject_SetItem, target, sub, source
+			});
+		}
+		else if (emit_mode == PREFER_LIST) {
+			auto source = func->emit_ctx->get_reg(dst);
+			auto target = func->emit_ctx->get_reg(src);
+			auto slow_path = func->emit_ctx->new_label();
+			auto end_label = func->emit_ctx->new_label();
+			func->emit_ctx->append_insn(MIR_BNE, {
+				slow_path, (intptr_t)&PyList_Type,
+				MIRMemOp(MIR_T_P, source, offsetof(PyObject, ob_type))
+			});
+			auto sub_idx_reg = func->emit_ctx->get_reg_variant(subscr, "i", MIR_T_I64);
+
+			auto size_reg = func->emit_ctx->new_temp_reg(MIR_T_I64);
+			func->emit_ctx->append_insn(MIR_MOV, {
+				size_reg,
+				MIRMemOp(MIR_T_P, source, offsetof(PyVarObject, ob_size))
+			});
+			auto skip_adjust_negidx = func->emit_ctx->new_label();
+			func->emit_ctx->append_insn(MIR_BGE, {
+				skip_adjust_negidx, sub_idx_reg, 0
+			});
+			func->emit_ctx->append_insn(MIR_ADD, {
+				sub_idx_reg, sub_idx_reg, size_reg
+			});
+			func->emit_ctx->append_label(skip_adjust_negidx);
+			func->emit_ctx->append_insn(MIR_BGE, {
+				slow_path, sub_idx_reg, size_reg
+			});
+			func->emit_ctx->append_insn(MIR_BLT, {
+				slow_path, sub_idx_reg, 0
+			});
+			auto list_contents_reg = func->emit_ctx->new_temp_reg(MIR_T_I64);
+			func->emit_ctx->append_insn(MIR_MOV, {
+				list_contents_reg,
+				MIRMemOp(MIR_T_P, source, offsetof(PyListObject, ob_item))
+			});
+			auto list_content_reg = func->emit_ctx->new_temp_reg(MIR_T_I64);
+			func->emit_ctx->append_insn(MIR_MOV, {
+				list_content_reg,
+				MIRMemOp(MIR_T_P, list_contents_reg, 0, sub_idx_reg, sizeof(PyObject*))
+			});
+			func->emit_ctx->append_insn(MIR_MOV, {
+				MIRMemOp(MIR_T_P, list_contents_reg, 0, sub_idx_reg, sizeof(PyObject*)),
+				target
+			});
+			emit_disown(func->emit_ctx.get(), list_content_reg);
+			emit_newown(func->emit_ctx.get(), target);
+			func->emit_ctx->append_insn(MIR_JMP, { end_label });
+			func->emit_ctx->append_label(slow_path);
+			func->emit_ctx->append_insn(MIR_MOV, { func->deopt_reg, 1 });
+			func->emit_ctx->append_label(end_label);
+		}
 	}
 
 	void DelItemIns::emit(Function* func) {
@@ -589,6 +641,7 @@ namespace yapyjit {
 			(int64_t)PyIter_Next, target, func->emit_ctx->get_reg(iter)
 		});
 		func->emit_ctx->append_insn(MIR_BF, { ensure_label(func, iterFailTo), target });
+	    gen_update_type_trace(func, dst);
 		emit_error_check(func, target);
 	}
 
@@ -701,6 +754,7 @@ namespace yapyjit {
 			emit_ctx->append_insn(MIR_MOV, {
 				dst, MIRMemOp(MIR_T_P, base, i * sizeof(PyObject*))
 			});
+			gen_update_type_trace(func, dests[i]);
 		}
 		for (size_t i = 0; i < dests.size(); i++) {
 			auto dst = emit_ctx->get_reg(dests[i]);
@@ -710,11 +764,35 @@ namespace yapyjit {
 	}
 
 	void ConstantIns::emit(Function* func) {
-		auto target = func->emit_ctx->get_reg(dst);
-		func->emit_ctx->append_insn(MIR_MOV, {
-			target, (int64_t)obj.borrow()
-		});
-		emit_newown(func->emit_ctx.get(), target);
+		switch (mode)
+		{
+		case yapyjit::ConstantIns::GENERIC: {
+			auto target = func->emit_ctx->get_reg(dst);
+			func->emit_ctx->append_insn(MIR_MOV, {
+				target, (int64_t)obj.borrow()
+			});
+			emit_newown(func->emit_ctx.get(), target);
+			break;
+		}
+		case yapyjit::ConstantIns::LONG: {
+			auto target = func->emit_ctx->get_reg_variant(dst, "i", MIR_T_I64);
+			func->emit_ctx->append_insn(MIR_MOV, {
+				target, PyLong_AsLongLong(obj.borrow())
+			});
+			emit_set_unbox_flag_i(func, dst);
+			break;
+		}
+		case yapyjit::ConstantIns::FLOAT: {
+			auto target = func->emit_ctx->get_reg_variant(dst, "f", MIR_T_D);
+			func->emit_ctx->append_insn(MIR_DMOV, {
+				target, MIROp(PyFloat_AsDouble(obj.borrow()))
+			});
+			emit_set_unbox_flag_f(func, dst);
+			break;
+		}
+		default:
+			throw std::runtime_error("Unreachable in ConstantIns::emit.");
+		}
 	}
 
 	void LoadClosureIns::emit(Function* func) {

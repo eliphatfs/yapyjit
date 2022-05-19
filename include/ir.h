@@ -334,8 +334,9 @@ namespace yapyjit {
 		int subscr;
 		int dst;
 		int src;
+		enum { GENERIC, PREFER_LIST } emit_mode;
 		StoreItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
-			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id) {}
+			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id), emit_mode(GENERIC) {}
 		virtual std::string pretty_print() {
 			return "sti $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]"
 				+ " <- $" + std::to_string(src);
@@ -416,11 +417,14 @@ namespace yapyjit {
 	public:
 		int dst;
 		ManagedPyo obj;
+		enum { GENERIC, LONG, FLOAT } mode;
 		ConstantIns(int dst_local_id, const ManagedPyo& const_obj)
-			: dst(dst_local_id), obj(const_obj) {
+			: dst(dst_local_id), obj(const_obj), mode(GENERIC) {
 		}
 		virtual std::string pretty_print() {
-			return "ldc $" + std::to_string(dst) + " <- " + obj.repr().to_cstr();
+			const char* modeid = "glf";
+			return std::string("ldc") + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
+				+ " $" + std::to_string(dst) + " <- " + obj.repr().to_cstr();
 		}
 		YAPYJIT_IR_COMMON(ConstantIns);
 	};

@@ -17,6 +17,8 @@ public:
 	}
 	MIROp(int64_t i): op(MIR_new_int_op(nullptr, i)) {
 	}
+	explicit MIROp(double f) : op(MIR_new_double_op(nullptr, f)) {
+	}
 	/*MIROp(uint64_t u) : op(MIR_new_uint_op(nullptr, u)) {
 	}*/
 };

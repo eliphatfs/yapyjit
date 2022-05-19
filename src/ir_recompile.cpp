@@ -331,11 +331,48 @@ namespace yapyjit {
 				}
 				break;
 			}
+			case InsnTag::CONSTANT: {
+				auto insn_b = (ConstantIns*)insn.get();
+				if (ty_inf[insn_b->dst] == TYI_LONG_FLAG) {
+					auto res = PyLong_AsLong(insn_b->obj.borrow());
+					if (res == -1 && PyErr_Occurred())
+						PyErr_Clear();
+					else {
+						auto opt = (ConstantIns*)insn_b->deepcopy();
+						opt->mode = ConstantIns::LONG;
+						temp_insns_opt.push_back(opt);
+						temp_insns_unopt.push_back(insn.release());
+						continue;
+					}
+				}
+				else if (ty_inf[insn_b->dst] == TYI_FLOAT_FLAG) {
+					auto opt = (ConstantIns*)insn_b->deepcopy();
+					opt->mode = ConstantIns::FLOAT;
+					temp_insns_opt.push_back(opt);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
+				}
+				break;
+			}
 			case InsnTag::LOADITEM: {
 				auto insn_b = (LoadItemIns*)insn.get();
 				if (ty_inf[insn_b->src] == TYI_LIST_FLAG && ty_inf[insn_b->subscr] == TYI_LONG_FLAG) {
 					auto opt = (LoadItemIns*)insn_b->deepcopy();
 					opt->emit_mode = LoadItemIns::PREFER_LIST;
+					temp_insns_opt.push_back(opt);
+					temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, unopt_labels.size()));
+					unopt_labels.push_back(new LabelIns());
+					temp_insns_unopt.push_back(unopt_labels[unopt_labels.size() - 1]);
+					temp_insns_unopt.push_back(insn.release());
+					continue;
+				}
+				break;
+			}
+			case InsnTag::STOREITEM: {
+				auto insn_b = (StoreItemIns*)insn.get();
+				if (ty_inf[insn_b->src] == TYI_LIST_FLAG && ty_inf[insn_b->subscr] == TYI_LONG_FLAG) {
+					auto opt = (StoreItemIns*)insn_b->deepcopy();
+					opt->emit_mode = StoreItemIns::PREFER_LIST;
 					temp_insns_opt.push_back(opt);
 					temp_insns_opt.push_back(new CheckDeoptIns(deopt_label, unopt_labels.size()));
 					unopt_labels.push_back(new LabelIns());
