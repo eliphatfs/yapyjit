@@ -379,6 +379,7 @@ namespace yapyjit {
 		auto t2 = std::chrono::high_resolution_clock::now();
 		auto gening = yapyjit::generate_mir(*self->compiled);
 		auto do_link = [self, gening, t2] {
+			self->compiled->mir_ctx->set_opt_level(2);
 			MIR_link(self->compiled->mir_ctx->ctx, MIR_set_gen_interface, nullptr);
 			self->generated = gening;
 			self->tier = 2;
