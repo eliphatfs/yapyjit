@@ -130,7 +130,7 @@ namespace yapyjit {
 						auto flags = ml->ml_flags;
 						if (flags & METH_FASTCALL) {
 							new_instructions.push_back(std::unique_ptr<Instruction>(
-								new CallNativeIns(call->dst, call->func, call->args, referee, ml->ml_meth, CallNativeIns::VECTORCALL)
+								new CallNativeIns(call->dst, call->func, call->args, referee, (void*)ml->ml_meth, CallNativeIns::VECTORCALL)
 							));
 							continue;
 						}

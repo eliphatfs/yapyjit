@@ -16,7 +16,7 @@ On Intel Core i7-4700MQ (benchmarks are listed in alphabetical order, time is in
 | Benchmark | CPython38 | CPy38 + yapyjit | Speed-up (100% → x%) |
 | :---: | :---: | :---: | :---: |
 | float | 242 ± 11 | 122 ± 6 | 50.5% |
-| mdp | 5607 ± 88 | 5547 ± 199 | 98.9% |
+| mdp (*) | 5607 ± 88 | 5547 ± 199 | 98.9% |
 | nbody | 338 ± 22 | 139 ± 12 | 41.2% |
 | scimark_fft | 822 ± 38 | 484 ± 29 | 58.9% |
 | scimark_lu | 322 ± 24 | 303 ± 20 | 94.1% |
