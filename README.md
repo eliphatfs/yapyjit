@@ -15,18 +15,16 @@ Surprisingly, only with very basic transpiling from python code to machine code 
 On Intel Core i7-4700MQ (benchmarks are listed in alphabetical order, time is in milliseconds):
 | Benchmark | CPython38 | CPy38 + yapyjit | Speed-up (100% → x%) |
 | :---: | :---: | :---: | :---: |
-| float | 242 ± 11 | 122 ± 6 | 50.5% |
-| mdp (*) | 5607 ± 88 | 5547 ± 199 | 98.9% |
-| nbody | 338 ± 22 | 139 ± 12 | 41.2% |
-| scimark_fft | 822 ± 38 | 484 ± 29 | 58.9% |
-| scimark_lu | 322 ± 24 | 303 ± 20 | 94.1% |
-| scimark_monte_carlo | 225 ± 16 | 172 ± 12 | 76.5% |
-| scimark_sor | 434 ± 20 | 368 ± 24 | 85.0% |
-| scimark_sparse_mat_mult | 10 ± 1 | 6 ± 0 | 57.8% |
-| spectral_norm | 334 ± 21 | 142 ± 21 | 42.4% |
+| float | 258 ± 20 | 133 ± 15 | 51.6% |
+| mdp | 6225 ± 367 | 5749 ± 144 | 92.4% |
+| nbody | 381 ± 33 | 163 ± 19 | 42.7% |
+| scimark_fft | 938 ± 49 | 578 ± 40 | 61.7% |
+| scimark_lu | 367 ± 27 | 344 ± 33 | 93.8% |
+| scimark_monte_carlo | 264 ± 28 | 203 ± 26 | 77.0% |
+| scimark_sor | 503 ± 41 | 351 ± 33 | 69.7% |
+| scimark_sparse_mat_mult | 12 ± 2 | 9 ± 1 | 75.4% |
+| spectral_norm | 386 ± 30 | 157 ± 18 | 40.6% |
 
-
-(*): yapyjit cannot fully compile yet, various parts are still interpreted.
 
 ## Installation
 ### Prebuilt wheels

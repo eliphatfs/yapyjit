@@ -192,11 +192,13 @@ namespace yapyjit {
 	void recompile(JittedFuncObject* self) {
 		auto t0 = std::chrono::high_resolution_clock::now();
 		std::map<int, int> assumptions;
+		std::map<int, PyTypeObject*>& sametrace = self->compiled->traced_var_types;
 		int a = 0;
 		for (const auto& tytrace : *self->call_args_type_traces) {
 			int flt_cnt = 0;
 			int long_cnt = 0;
 			int list_cnt = 0;
+			int same_cnt = 0;
 			for (int i = 0; i < N_TYPE_TRACE_ENTRY; i++)
 				if (tytrace.types[i] == &PyLong_Type)
 					long_cnt++;
@@ -204,15 +206,21 @@ namespace yapyjit {
 					flt_cnt++;
 				else if (tytrace.types[i] == &PyList_Type)
 					list_cnt++;
-			if (long_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[++a] = 1;
-			if (flt_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[++a] = 2;
-			if (list_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[++a] = 4;
+				else if (tytrace.types[i] == tytrace.types[0])
+					same_cnt++;
+			++a;
+			if (long_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[a] = 1;
+			if (flt_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[a] = 2;
+			if (list_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[a] = 4;
+			if (same_cnt >= N_TYPE_TRACE_ENTRY && tytrace.types[0])
+				sametrace[a] = tytrace.types[0];
 		}
 		for (const auto& tracepair : self->compiled->insn_type_trace_entries) {
 			if (assumptions.count(tracepair.first)) continue;
 			int flt_cnt = 0;
 			int long_cnt = 0;
 			int list_cnt = 0;
+			int same_cnt = 0;
 			auto& tytrace = *tracepair.second;
 			for (int i = 0; i < N_TYPE_TRACE_ENTRY; i++)
 				if (tytrace.types[i] == &PyLong_Type)
@@ -221,9 +229,13 @@ namespace yapyjit {
 					flt_cnt++;
 				else if (tytrace.types[i] == &PyList_Type)
 					list_cnt++;
+				else if (tytrace.types[i] == tytrace.types[0])
+					same_cnt++;
 			if (long_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[tracepair.first] = 1;
 			if (flt_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[tracepair.first] = 2;
 			if (list_cnt >= N_TYPE_TRACE_ENTRY - 1) assumptions[tracepair.first] = 4;
+			if (same_cnt >= N_TYPE_TRACE_ENTRY && tytrace.types[0])
+				sametrace[tracepair.first] = tytrace.types[0];
 		}
 		auto ty_inf = intra_procedure_type_infer(*self->compiled, assumptions);
 		/*

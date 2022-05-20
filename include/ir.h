@@ -696,6 +696,7 @@ namespace yapyjit {
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
 		std::map<int, std::unique_ptr<TypeTraceEntry>> insn_type_trace_entries;
+		std::map<int, PyTypeObject*> traced_var_types;
 		MIRRegOp return_reg, deopt_reg;
 		MIRLabelOp epilogue_label;
 		MIRLabelOp error_label;
