@@ -1,7 +1,11 @@
 import types
 import yapyjit
 import os
-import inspect
+import gc
+
+
+def gc_tune():
+    gc.set_threshold(4200, 10, 10)
 
 
 def postfix():
@@ -13,6 +17,7 @@ def postfix():
 def jittify(globals_dict):
     if os.environ.get("YAPYJIT_EN") == "DISABLE":
         return
+    gc_tune()
     for key, obj in globals_dict.items():
         if isinstance(obj, type) and issubclass(obj, object):
             try:
