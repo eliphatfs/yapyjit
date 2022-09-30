@@ -10,9 +10,6 @@ static_assert(sizeof(Py_ssize_t) == 8, "Only 64 bit machines are supported");
 namespace yapyjit {
     // extern MIRContext mir_ctx;
 	extern std::unique_ptr<AST> ast_py2native(ManagedPyo ast);
-	extern MIR_item_t generate_mir(Function& func);
-    extern bool recompile_debug_enabled, time_profiling_enabled;
-    extern std::map<std::string, std::pair<int, double>> time_profile_data;
 
 	inline ManagedPyo get_py_ast(PyObject* pyfunc) {
         auto locals = ManagedPyo(PyDict_New());

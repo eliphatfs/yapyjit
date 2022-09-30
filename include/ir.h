@@ -26,20 +26,6 @@
 #include <mir_wrapper.h>
 #define YAPYJIT_IR_COMMON(CLS) \
 	virtual Instruction* deepcopy() { return new CLS(*this); } \
-	virtual void emit(Function* func); \
-	virtual void fill_operand_info(std::vector<OperandInfo>& fill)
-
-#define N_TYPE_TRACE_ENTRY 4
-typedef struct {
-	PyTypeObject* types[N_TYPE_TRACE_ENTRY];
-	int idx;  // round-robin
-} TypeTraceEntry;
-
-inline void update_type_trace_entry(TypeTraceEntry* entry, PyTypeObject* ty) {
-	entry->types[entry->idx++] = ty;
-	if (entry->idx >= N_TYPE_TRACE_ENTRY)
-		entry->idx = 0;
-}
 
 namespace yapyjit {
 	BETTER_ENUM(
@@ -71,17 +57,6 @@ namespace yapyjit {
 		STOREGLOBAL,
 		STOREITEM,
 		UNARYOP,
-		O_UNBOX,
-		O_BOX,
-		O_CHECKDEOPT,
-		O_SWITCHDEOPT,
-		// C_ insns will not exist before combining insns/peephole opt
-		// We do not need to include these in analysis
-		// Update: it is a JIT and during recompilation perhaps we need
-		// these in analysis
-		C_CALLMTHD,
-		C_CALLNATIVE,
-		C_JUMPTRUEFAST,
 		// V_ virtual/special insns
 		V_SETERRLAB,
 		V_EPILOG
@@ -133,8 +108,6 @@ namespace yapyjit {
 		virtual std::string pretty_print() = 0;
 		virtual InsnTag tag() = 0;
 		virtual Instruction* deepcopy() = 0;
-		virtual void emit(Function* func) = 0;
-		virtual void fill_operand_info(std::vector<OperandInfo>& fill) { }
 		virtual bool control_leaves() { return false; }
 	};
 
@@ -260,18 +233,6 @@ namespace yapyjit {
 			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
 		}
 		YAPYJIT_IR_COMMON(JumpTruthyIns);
-	};
-
-	class JumpTrueFastIns : public InsnWithTag<InsnTag::C_JUMPTRUEFAST> {
-	public:
-		LabelIns* target;
-		int cond;
-		JumpTrueFastIns(LabelIns* target_, int cond_local_id)
-			: target(target_), cond(cond_local_id) {}
-		virtual std::string pretty_print() {
-			return "jt.bool " + target->pretty_print() + ", $" + std::to_string(cond);
-		}
-		YAPYJIT_IR_COMMON(JumpTrueFastIns);
 	};
 
 	class LoadAttrIns : public InsnWithTag<InsnTag::LOADATTR> {
@@ -516,54 +477,6 @@ namespace yapyjit {
 		YAPYJIT_IR_COMMON(CallIns);
 	};
 
-	class CallNativeIns : public InsnWithTag<InsnTag::C_CALLNATIVE> {
-	public:
-		int dst, func;
-		std::vector<int> args;
-		PyObject* eqcheck;
-		void* cfuncptr;
-		enum { VECTORCALL, CCALL } mode;
-		CallNativeIns(int dst_local_id, int func_local_id, const std::vector<int>& args_, PyObject* chk, void* cfuncaddr, decltype(mode) mode_)
-			: dst(dst_local_id), func(func_local_id), args(args_), eqcheck(chk), cfuncptr(cfuncaddr), mode(mode_) {
-		}
-		virtual std::string pretty_print() {
-			std::string res = "call.na $" + std::to_string(dst) + " <- $" + std::to_string(func) + "(";
-			bool first = true;
-			for (auto arg : args) {
-				if (!first) res += ", ";
-				first = false;
-				res += "$" + std::to_string(arg);
-			}
-			return res + ")";
-		}
-		YAPYJIT_IR_COMMON(CallNativeIns);
-	};
-
-	class CallMthdIns : public InsnWithTag<InsnTag::C_CALLMTHD> {
-	public:
-		int dst, obj;
-		std::string mthd;
-		std::vector<int> args;
-		std::unique_ptr<Instruction> orig_lda, orig_call;
-		CallMthdIns(int dst_local_id, int obj_local_id, const std::string& method_name, const std::vector<int>& args_v, std::unique_ptr<Instruction>&& original_lda, std::unique_ptr<Instruction>&& original_call)
-			: dst(dst_local_id), obj(obj_local_id), mthd(method_name), args(args_v), orig_lda(std::move(original_lda)), orig_call(std::move(original_call)) {
-		}
-		CallMthdIns(const CallMthdIns& copy)
-			: dst(copy.dst), obj(copy.obj), mthd(copy.mthd), args(copy.args) {
-			orig_lda = std::unique_ptr<Instruction>(copy.orig_lda->deepcopy());
-			orig_call = std::unique_ptr<Instruction>(copy.orig_call->deepcopy());
-		}
-		virtual std::string pretty_print() {
-			std::string res = "call.mthd $" + std::to_string(dst) + " <- $" + std::to_string(obj) + "." + mthd + "(";
-			for (size_t i = 0; i < args.size(); i++) {
-				if (i != 0) res += ", ";
-				res += "$" + std::to_string(args[i]);
-			}
-			return res + ")";
-		}
-		YAPYJIT_IR_COMMON(CallMthdIns);
-	};
-
 	class CheckErrorTypeIns : public InsnWithTag<InsnTag::CHECKERRORTYPE> {
 	public:
 		LabelIns* failjump;
@@ -611,65 +524,7 @@ namespace yapyjit {
 		YAPYJIT_IR_COMMON(EpilogueIns);
 		virtual bool control_leaves() { return true; }
 	};
-	BETTER_ENUM(
-		BoxMode, int,
-		i, f
-	);
-	class UnboxIns : public InsnWithTag<InsnTag::O_UNBOX> {
-	public:
-		int dst;
-		BoxMode mode;
-		UnboxIns(int dst_local_id, BoxMode mode_)
-			: dst(dst_local_id), mode(mode_) {}
-		virtual std::string pretty_print() {
-			return "unbox." + std::string(mode._to_string()) + " $" + std::to_string(dst);
-		}
-		YAPYJIT_IR_COMMON(UnboxIns);
-	};
-	class BoxIns : public InsnWithTag<InsnTag::O_BOX> {
-	public:
-		int dst;
-		BoxMode mode;
-		BoxIns(int dst_local_id, BoxMode mode_)
-			: dst(dst_local_id), mode(mode_) {}
-		virtual std::string pretty_print() {
-			return "box." + std::string(mode._to_string()) + " $" + std::to_string(dst);
-		}
-		YAPYJIT_IR_COMMON(BoxIns);
-	};
-	class CheckDeoptIns : public InsnWithTag<InsnTag::O_CHECKDEOPT> {
-	public:
-		LabelIns* target;
-		int switcher;
-		CheckDeoptIns(LabelIns* target_, int switcher_) : target(target_), switcher(switcher_) {}
-		virtual std::string pretty_print() {
-			return "chkdeopt " + target->pretty_print() + ", " + std::to_string(switcher);
-		}
-		YAPYJIT_IR_COMMON(CheckDeoptIns);
-	};
-	class SwitchDeoptIns : public InsnWithTag<InsnTag::O_SWITCHDEOPT> {
-	public:
-		std::vector<LabelIns*> targets;
-		SwitchDeoptIns(const std::vector<LabelIns*>& targets_) : targets(targets_) {}
-		SwitchDeoptIns(std::vector<LabelIns*>&& targets_) : targets(targets_) {}
-		virtual std::string pretty_print() {
-			std::string s = "switchdeopt ";
-			bool first = true;
-			for (auto target : targets) {
-				if (!first) s += ", ";
-				first = false;
-				s += target->pretty_print();
-			}
-			return s;
-		}
-		YAPYJIT_IR_COMMON(SwitchDeoptIns);
-	};
 
-	class DefUseResult {
-	public:
-		std::vector<std::vector<Instruction*>> def, use;
-		DefUseResult(size_t var_cnt): def(var_cnt), use(var_cnt) { }
-	};
 	class PBlock {
 	public:
 		virtual void emit_exit(Function& appender) = 0;
@@ -695,8 +550,6 @@ namespace yapyjit {
 		MIRContext* mir_ctx;  // TODO: leak
 		std::vector<ManagedPyo> emit_keeprefs;
 		std::vector<std::unique_ptr<char[]>> fill_memory;
-		std::map<int, std::unique_ptr<TypeTraceEntry>> insn_type_trace_entries;
-		std::map<int, PyTypeObject*> traced_var_types;
 		MIRRegOp return_reg, deopt_reg;
 		MIRLabelOp epilogue_label;
 		MIRLabelOp error_label;
@@ -723,10 +576,6 @@ namespace yapyjit {
 			fill_memory.push_back(std::unique_ptr<char[]>(fill));
 			return fill;
 		}
-
-		void dce();
-		DefUseResult loc_defuse();
-		void peephole();
 	};
 
 	inline int new_temp_var(Function& appender) {

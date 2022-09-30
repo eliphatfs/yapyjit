@@ -429,8 +429,6 @@ namespace yapyjit {
 			std::make_move_iterator(prelude.instructions.begin()),
 			std::make_move_iterator(prelude.instructions.end())
 		);
-		appender->dce();
-		appender->peephole();
 		return appender;
 	}
 
