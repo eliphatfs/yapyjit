@@ -1,9 +1,4 @@
 // Hint files help the Visual Studio IDE interpret Visual C++ identifiers
 // such as names of functions and macros.
 // For more information see https://go.microsoft.com/fwlink/?linkid=865984
-#define IRG_OPERAND_INFO_1DEF_2USE(CLS, DEF_NAME, USE_NAME1, USE_NAME2) void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { fill.push_back(OperandInfo(OperandKind::Def, DEF_NAME)); fill.push_back(OperandInfo(OperandKind::Use, USE_NAME1)); fill.push_back(OperandInfo(OperandKind::Use, USE_NAME2)); }
-#define IRG_OPERAND_INFO_1USE(CLS, USE_NAME) void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { fill.push_back(OperandInfo(OperandKind::Use, USE_NAME)); }
-#define IRG_OPERAND_INFO_2USE(CLS, USE_NAME1, USE_NAME2) void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { fill.push_back(OperandInfo(OperandKind::Use, USE_NAME1)); fill.push_back(OperandInfo(OperandKind::Use, USE_NAME2)); }
-#define IRG_OPERAND_INFO_3USE(CLS, USE_NAME1, USE_NAME2, USE_NAME3) void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { fill.push_back(OperandInfo(OperandKind::Use, USE_NAME1)); fill.push_back(OperandInfo(OperandKind::Use, USE_NAME2)); fill.push_back(OperandInfo(OperandKind::Use, USE_NAME3)); }
-#define IRG_OPERAND_INFO_1DEF_1USE(CLS, DEF_NAME, USE_NAME) void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { fill.push_back(OperandInfo(OperandKind::Def, DEF_NAME)); fill.push_back(OperandInfo(OperandKind::Use, USE_NAME)); }
-#define IRG_OPERAND_INFO_1DEF(CLS, DEF_NAME) void CLS::fill_operand_info(std::vector<OperandInfo>& fill) { fill.push_back(OperandInfo(OperandKind::Def, DEF_NAME)); }
+#define YAPYJIT_IR_COMMON(CLS) virtual Instruction* deepcopy() { return new CLS(*this); }
