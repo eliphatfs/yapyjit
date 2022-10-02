@@ -15,6 +15,7 @@
 #ifdef _MSC_VER
 #pragma warning (disable: 26812)
 #endif
+#include <array>
 #include <string>
 #include <vector>
 #include <memory>
@@ -24,564 +25,295 @@
 #include <Python.h>
 #include <mpyo.h>
 #include <mir_wrapper.h>
+
 #define YAPYJIT_IR_COMMON(CLS) \
 	virtual Instruction* deepcopy() { return new CLS(*this); } \
 
 namespace yapyjit {
 	BETTER_ENUM(
-		InsnTag, int,
-		BINOP = 1,
-		BUILD,
-		CALL,
-		CHECKERRORTYPE,
-		COMPARE,
-		CONSTANT,
-		DELATTR,
-		DELITEM,
-		DESTRUCT,
-		ERRORPROP,
-		CLEARERRORCTX,
-		ITERNEXT,
-		JUMP,
-		JUMPTRUTHY,
-		LABEL,
-		LOADATTR,
-		LOADCLOSURE,
-		LOADGLOBAL,
-		LOADITEM,
-		MOVE,
-		RAISE,
-		RETURN,
-		STOREATTR,
-		STORECLOSURE,
-		STOREGLOBAL,
-		STOREITEM,
-		UNARYOP,
-		// V_ virtual/special insns
-		V_SETERRLAB,
-		V_EPILOG
+		InsnTag, uint8_t,
+		Add = 1, Sub, Mult, MatMult, Div, Mod, Pow,
+		LShift, RShift, BitOr, BitXor, BitAnd,
+		FloorDiv,
+		Invert, Not, UAdd, USub,
+		Eq, NotEq, Lt, LtE, Gt, GtE, Is, IsNot, In, NotIn,
+		CheckErrorType,
+		Constant,
+		DelAttr,
+		DelItem,
+		ErrorProp,
+		ClearErrorCtx,
+		IterNext,
+		Jump,
+		JumpTruthy,
+		LoadAttr,
+		LoadClosure,
+		LoadGlobal,
+		LoadItem,
+		Move,
+		Raise,
+		Return,
+		StoreAttr,
+		StoreClosure,
+		StoreGlobal,
+		StoreItem,
+		SetErrorLabel,
+
+		BuildDict, BuildList, BuildSet, BuildTuple,
+		Call,
+		Destruct,
+		
+		Label,
+		Prolog,
+		Epilog
 	)
 
-	BETTER_ENUM(
-		Op2ary, int, Add = 1, Sub = 2, Mult = 3, MatMult = 4, Div = 5, Mod = 6, Pow = 7,
-		LShift = 8, RShift = 9, BitOr = 10, BitXor = 11, BitAnd = 12,
-		FloorDiv = 13
-	)
+	template<typename NativeTHead, typename... NativeT>
+	inline auto fill_bytes(uint8_t* ptr, NativeTHead arg0, NativeT... args) {
+		*reinterpret_cast<NativeTHead*>(ptr) = arg0;
+		if constexpr (sizeof...(args) > 0) {
+			fill_bytes(ptr + sizeof(NativeTHead), args...);
+		}
+	}
 
-	BETTER_ENUM(
-		Op1ary, int,
-		Invert = 1, Not = 2, UAdd = 3, USub = 4
-	)
+	template<typename... NativeT>
+	inline auto bytes(NativeT... args) {
+		std::array<uint8_t, (sizeof(NativeT) + ...)> result;
+		fill_bytes(result.data(), args...);
+		return result;
+	}
 
-	BETTER_ENUM(
-		OpCmp, int, Eq = 1, NotEq, Lt, LtE, Gt, GtE, Is, IsNot, In, NotIn
-	)
+	typedef int16_t local_t;
+	typedef uint32_t iaddr_t;
 
-	BETTER_ENUM(
-		OperandKind, int,
-		Def = 1, Use = 2, JumpLabel = 3
-	)
-	class Function;
-	class LabelIns;
-	struct OperandInfo {
-		OperandKind kind;
-		union {
-			int local;
-			LabelIns** label;
-		};
-		OperandInfo(OperandKind kind_, LabelIns*& lab_) : kind(kind_) {
-			if (kind_ == +OperandKind::JumpLabel)
-				label = &lab_;
-			else throw std::runtime_error("OperandInfo ctor: Unreachable!");
-		}
-		OperandInfo(OperandKind kind_, int& val_) : kind(kind_) {
-			if (kind_ == +OperandKind::Def || kind_ == +OperandKind::Use)
-				local = val_;
-			else throw std::runtime_error("OperandInfo ctor: Unreachable!");
-		}
-	};
+	const iaddr_t L_PLACEHOLDER = 0;
 
-	// Base class for all instructions
-	class Instruction {
-	public:
-		virtual ~Instruction() = default;
-		virtual std::string pretty_print() = 0;
-		virtual InsnTag tag() = 0;
-		virtual Instruction* deepcopy() = 0;
-		virtual bool control_leaves() { return false; }
-	};
+	inline auto raise_ins(local_t local_id) {
+		return bytes(InsnTag::Raise, local_id);
+	}
+	
+	inline auto return_ins(local_t local_id) {
+		return bytes(InsnTag::Return, local_id);
+	}
 
-	template<int T_tag>
-	class InsnWithTag : public Instruction {
-		virtual InsnTag tag() { return InsnTag::_from_integral(T_tag); }
-	};
+	inline auto move_ins(local_t dst_local_id, local_t src_local_id) {
+		return bytes(InsnTag::Move, dst_local_id, src_local_id);
+	}
 
-	// Empty nop instruction designated for use as labels
-	class LabelIns: public InsnWithTag<InsnTag::LABEL> {
-	public:
-		virtual std::string pretty_print() {
-			return "@" + std::to_string((intptr_t)this);
-		}
-		YAPYJIT_IR_COMMON(LabelIns);
-	};
+	inline auto binop_ins(InsnTag op, local_t dst_local_id, local_t left_local_id, local_t right_local_id) {
+		return bytes(op, dst_local_id, left_local_id, right_local_id);
+	}
 
-	class RaiseIns : public InsnWithTag<InsnTag::RAISE> {
-	public:
-		int exc;
-		RaiseIns(int local_id) : exc(local_id) {}
-		virtual std::string pretty_print() {
-			return "raise $" + std::to_string(exc);
-		}
-		YAPYJIT_IR_COMMON(RaiseIns);
-		virtual bool control_leaves() { return true; }
-	};
+	inline auto unaryop_ins(InsnTag op, local_t dst_local_id, local_t src_local_id) {
+		return bytes(op, dst_local_id, src_local_id);
+	}
 
-	class ReturnIns : public InsnWithTag<InsnTag::RETURN> {
-	public:
-		int src;
-		ReturnIns(int local_id) : src(local_id) {}
-		virtual std::string pretty_print() {
-			return "ret $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(ReturnIns);
-		virtual bool control_leaves() { return true; }
-	};
+	inline auto compare_ins(InsnTag op, local_t dst_local_id, local_t left_local_id, local_t right_local_id) {
+		return bytes(op, dst_local_id, left_local_id, right_local_id);
+	}
 
-	class MoveIns : public InsnWithTag<InsnTag::MOVE> {
-	public:
-		int dst;
-		int src;
-		enum { GENERIC, LONG, FLOAT } mode;
-		MoveIns(int dst_local_id, int src_local_id)
-			: dst(dst_local_id), src(src_local_id), mode(GENERIC) {}
-		virtual std::string pretty_print() {
-			const char* modeid = "glf";
-			return "mov" + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
-				+ " $" + std::to_string(dst) + " <- $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(MoveIns);
-	};
+	inline auto jump_ins(iaddr_t target = L_PLACEHOLDER) {
+		return bytes(InsnTag::Jump, target);
+	}
 
-	class BinOpIns : public InsnWithTag<InsnTag::BINOP> {
-	public:
-		int dst, left, right;
-		Op2ary op;
-		enum { GENERIC, LONG, FLOAT } mode;
-		BinOpIns(int dst_local_id, Op2ary op_, int left_local_id, int right_local_id)
-			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_), mode(GENERIC) {}
-		virtual std::string pretty_print() {
-			const char* modeid = "glf";
-			return op._to_string() + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
-				+ " $" + std::to_string(dst)
-				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
-		}
-		void binop_emit_float(Function* func);
-		void binop_emit_long(Function* func);
-		YAPYJIT_IR_COMMON(BinOpIns);
-	};
+	inline auto jump_truthy_ins(local_t cond_local_id, iaddr_t target = L_PLACEHOLDER) {
+		return bytes(InsnTag::JumpTruthy, cond_local_id, target);
+	}
 
-	class UnaryOpIns : public InsnWithTag<InsnTag::UNARYOP> {
-	public:
-		int dst, operand;
-		Op1ary op;
-		UnaryOpIns(int dst_local_id, Op1ary op_, int operand_local_id)
-			: dst(dst_local_id), operand(operand_local_id), op(op_) {}
-		virtual std::string pretty_print() {
-			return std::string(op._to_string())
-				+ " $" + std::to_string(dst)
-				+ " <- $" + std::to_string(operand);
-		}
-		YAPYJIT_IR_COMMON(UnaryOpIns);
-	};
+	inline auto load_attr_ins(local_t dst_local_id, local_t obj_local_id, const std::string& attrname) {
+		return std::make_tuple(bytes(InsnTag::LoadAttr, dst_local_id, obj_local_id), attrname);
+	}
 
-	class CompareIns : public InsnWithTag<InsnTag::COMPARE> {
-	public:
-		int dst, left, right;
-		OpCmp op;
-		enum { GENERIC, LONG, FLOAT } mode;
-		CompareIns(int dst_local_id, OpCmp op_, int left_local_id, int right_local_id)
-			: dst(dst_local_id), left(left_local_id), right(right_local_id), op(op_), mode(GENERIC) {}
-		virtual std::string pretty_print() {
-			const char* modeid = "glf";
-			return std::string(op._to_string()) + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
-				+ " $" + std::to_string(dst)
-				+ " <- $" + std::to_string(left) + ", $" + std::to_string(right);
-		}
-		void cmp_emit_float(Function* func);
-		void cmp_emit_long(Function* func);
-		YAPYJIT_IR_COMMON(CompareIns);
-	};
+	inline auto store_attr_ins(local_t obj_local_id, local_t src_local_id, const std::string& attrname) {
+		return std::make_tuple(bytes(InsnTag::StoreAttr, src_local_id, obj_local_id), attrname);
+	}
 
-	class JumpIns : public InsnWithTag<InsnTag::JUMP> {
-	public:
-		LabelIns * target;
-		JumpIns(LabelIns * target_): target(target_) {}
-		virtual std::string pretty_print() {
-			return "jmp " + target->pretty_print();
-		}
-		YAPYJIT_IR_COMMON(JumpIns);
-		virtual bool control_leaves() { return true; }
-	};
+	inline auto del_attr_ins(local_t obj_local_id, const std::string& attrname) {
+		return std::make_tuple(bytes(InsnTag::DelAttr, obj_local_id), attrname);
+	}
 
-	class JumpTruthyIns : public InsnWithTag<InsnTag::JUMPTRUTHY> {
-	public:
-		LabelIns* target;
-		int cond;
-		JumpTruthyIns(LabelIns* target_, int cond_local_id)
-			: target(target_), cond(cond_local_id) {}
-		virtual std::string pretty_print() {
-			return "jt " + target->pretty_print() + ", $" + std::to_string(cond);
-		}
-		YAPYJIT_IR_COMMON(JumpTruthyIns);
-	};
+	inline auto load_item_ins(local_t dst_local_id, local_t obj_local_id, local_t subscr_local_id) {
+		return bytes(InsnTag::LoadItem, dst_local_id, obj_local_id, subscr_local_id);
+	}
 
-	class LoadAttrIns : public InsnWithTag<InsnTag::LOADATTR> {
-	public:
-		std::string name;
-		int dst;
-		int src;
-		LoadAttrIns(const std::string& attrname_, int dst_local_id, int src_local_id)
-			: name(attrname_), dst(dst_local_id), src(src_local_id) {}
-		virtual std::string pretty_print() {
-			return "lda $" + std::to_string(dst) + " <- $" +
-				std::to_string(src) + "." + name;
-		}
-		YAPYJIT_IR_COMMON(LoadAttrIns);
-	};
+	inline auto store_item_ins(local_t obj_local_id, local_t src_local_id, local_t subscr_local_id) {
+		return bytes(InsnTag::StoreItem, src_local_id, obj_local_id, subscr_local_id);
+	}
 
-	class StoreAttrIns : public InsnWithTag<InsnTag::STOREATTR> {
-	public:
-		std::string name;
-		int dst;
-		int src;
-		StoreAttrIns(const std::string& attrname_, int dst_local_id, int src_local_id)
-			: name(attrname_), dst(dst_local_id), src(src_local_id) {}
-		virtual std::string pretty_print() {
-			return "sta $" + std::to_string(dst) + "." + name
-				+ " <- $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(StoreAttrIns);
-	};
+	inline auto del_item_ins(local_t obj_local_id, local_t subscr_local_id) {
+		return bytes(InsnTag::DelItem, obj_local_id, subscr_local_id);
+	}
 
-	class DelAttrIns : public InsnWithTag<InsnTag::DELATTR> {
-	public:
-		std::string name;
-		int dst;
-		DelAttrIns(const std::string& attrname_, int dst_local_id)
-			: name(attrname_), dst(dst_local_id) {}
-		virtual std::string pretty_print() {
-			return "dela $" + std::to_string(dst) + "." + name;
-		}
-		YAPYJIT_IR_COMMON(DelAttrIns);
-	};
+	inline auto iter_next_ins(local_t dst_local_id, local_t iter_local_id, iaddr_t iter_fail_to = L_PLACEHOLDER) {
+		return bytes(InsnTag::IterNext, dst_local_id, iter_local_id, iter_fail_to);
+	}
 
-	class LoadItemIns : public InsnWithTag<InsnTag::LOADITEM> {
-	public:
-		int subscr;
-		int dst;
-		int src;
-		enum { GENERIC, PREFER_LIST } emit_mode;
-		LoadItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
-			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id), emit_mode(GENERIC) {}
-		void emit_generic(Function* func);
-		virtual std::string pretty_print() {
-			return "ldi $" + std::to_string(dst)
-				+ " <- $" + std::to_string(src) + "[$" + std::to_string(subscr) + "]";
-		}
-		YAPYJIT_IR_COMMON(LoadItemIns);
-	};
+	inline auto build_ins(InsnTag mode, local_t dst_local_id, const std::vector<short>& args) {
+		if (args.size() > UINT8_MAX) throw std::runtime_error("Build instruction with more than 255 targets.");
+		return std::make_tuple(bytes(mode, dst_local_id, (uint8_t)args.size()), args);
+	}
 
-	class StoreItemIns : public InsnWithTag<InsnTag::STOREITEM> {
-	public:
-		int subscr;
-		int dst;
-		int src;
-		enum { GENERIC, PREFER_LIST } emit_mode;
-		StoreItemIns(int subscr_local_id, int dst_local_id, int src_local_id)
-			: subscr(subscr_local_id), dst(dst_local_id), src(src_local_id), emit_mode(GENERIC) {}
-		virtual std::string pretty_print() {
-			return "sti $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]"
-				+ " <- $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(StoreItemIns);
-	};
+	inline auto destruct_ins(local_t src_local_id, const std::vector<short>& dests) {
+		if (dests.size() > UINT8_MAX) throw std::runtime_error("Destruct instruction with more than 255 targets.");
+		return std::make_tuple(bytes(InsnTag::Destruct, src_local_id, (uint8_t)dests.size()), dests);
+	}
 
-	class DelItemIns : public InsnWithTag<InsnTag::DELITEM> {
-	public:
-		int subscr;
-		int dst;
-		DelItemIns(int subscr_local_id, int dst_local_id)
-			: subscr(subscr_local_id), dst(dst_local_id) {}
-		virtual std::string pretty_print() {
-			return "deli $" + std::to_string(dst) + "[$" + std::to_string(subscr) + "]";
-		}
-		YAPYJIT_IR_COMMON(DelItemIns);
-	};
+	inline auto constant_ins(local_t dst_local_id, ManagedPyo const_obj) {
+		return bytes(InsnTag::Constant, dst_local_id, const_obj.transfer());
+	}
 
-	// This is a 'large' instruction that I am not quite in favor of.
-	class IterNextIns : public InsnWithTag<InsnTag::ITERNEXT> {
-	public:
-		LabelIns* iterFailTo;
-		int dst;
-		int iter;
-		IterNextIns(LabelIns* iterFailTo_, int dst_local_id, int iter_local_id)
-			: iterFailTo(iterFailTo_), dst(dst_local_id), iter(iter_local_id) {}
-		virtual std::string pretty_print() {
-			return "fornx " + iterFailTo->pretty_print() + ", $" + std::to_string(dst)
-				   + " <- $" + std::to_string(iter);
-		}
-		YAPYJIT_IR_COMMON(IterNextIns);
-	};
+	inline auto load_global_ins(local_t dst_local_id, const std::string& name) {
+		auto blt = PyEval_GetBuiltins();
+		if (!blt) throw std::logic_error("load_global_ins cannot get builtins.");
+		auto hashee = ManagedPyo(PyUnicode_FromString(name.c_str()));
+		auto bltin_cache_slot = PyDict_GetItem(blt, hashee.borrow());
+		// if (!PyDict_CheckExact(blt)) throw std::logic_error("load_global_ins builtins is not a dict.");
+		return std::make_tuple(bytes(InsnTag::LoadGlobal, dst_local_id, bltin_cache_slot), name);
+	}
 
-	BETTER_ENUM(
-		BuildInsMode,
-		int,
-		DICT = 1, LIST, SET, TUPLE
-	)
+	inline auto store_global_ins(local_t src_local_id, const std::string& name) {
+		return std::make_tuple(bytes(InsnTag::StoreGlobal, src_local_id), name);
+	}
 
-	class BuildIns : public InsnWithTag<InsnTag::BUILD> {
-	public:
-		BuildInsMode mode;
-		int dst;
-		std::vector<int> args;
-		BuildIns(int dst_local_id, BuildInsMode mode_)
-			: dst(dst_local_id), mode(mode_) {
-		}
-		virtual std::string pretty_print() {
-			std::string res = "build $" + std::to_string(dst) + " <- " + mode._to_string()  + "(";
-			for (size_t i = 0; i < args.size(); i++) {
-				if (i != 0) res += ", ";
-				res += "$" + std::to_string(args[i]);
-			}
-			return res + ")";
-		}
-		YAPYJIT_IR_COMMON(BuildIns);
-	};
+	inline auto load_closure_ins(local_t dst_local_id, local_t closure_id) {
+		return bytes(InsnTag::LoadClosure, dst_local_id, closure_id);
+	}
 
-	class DestructIns : public InsnWithTag<InsnTag::DESTRUCT> {
-	public:
-		int src;
-		std::vector<int> dests;
-		DestructIns(int src_local_id) : src(src_local_id) {
-		}
-		virtual std::string pretty_print() {
-			std::string res = "destruct (";
-			for (size_t i = 0; i < dests.size(); i++) {
-				if (i != 0) res += ", ";
-				res += "$" + std::to_string(dests[i]);
-			}
-			return res + ")" + " <- $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(DestructIns);
-	};
+	inline auto store_closure_ins(local_t src_local_id, local_t closure_id) {
+		return bytes(InsnTag::StoreClosure, src_local_id, closure_id);
+	}
 
-	class ConstantIns : public InsnWithTag<InsnTag::CONSTANT> {
-	public:
-		int dst;
-		ManagedPyo obj;
-		enum { GENERIC, LONG, FLOAT } mode;
-		ConstantIns(int dst_local_id, const ManagedPyo& const_obj)
-			: dst(dst_local_id), obj(const_obj), mode(GENERIC) {
-		}
-		virtual std::string pretty_print() {
-			const char* modeid = "glf";
-			return std::string("ldc") + (mode == GENERIC ? "" : std::string(".") + modeid[mode])
-				+ " $" + std::to_string(dst) + " <- " + obj.repr().to_cstr();
-		}
-		YAPYJIT_IR_COMMON(ConstantIns);
-	};
+	inline auto call_ins(local_t dst_local_id, local_t func_local_id, const std::vector<short>& args, const std::map<std::string, short>& kwargs) {
+		return std::make_tuple(
+			bytes(InsnTag::Call, dst_local_id, func_local_id, (uint8_t)args.size(), (uint8_t)kwargs.size()),
+			args, kwargs
+		);
+	}
 
-	class LoadGlobalIns : public InsnWithTag<InsnTag::LOADGLOBAL> {
-	public:
-		int dst;
-		std::string name;
-		PyObject* bltin_cache_slot;
-		LoadGlobalIns(int dst_local_id, const std::string& name_)
-			: dst(dst_local_id), name(name_) {
-			auto blt = PyEval_GetBuiltins();
-			if (!blt) throw std::logic_error(__FUNCTION__" cannot get builtins.");
-			if (!PyDict_CheckExact(blt)) throw std::logic_error(__FUNCTION__" builtins is not a dict.");
+	inline auto check_error_type_ins(local_t dst_local_id, local_t ty_local_id, iaddr_t fail_jump_addr = L_PLACEHOLDER) {
+		return bytes(InsnTag::CheckErrorType, dst_local_id, ty_local_id, fail_jump_addr);
+	}
 
-			// Assume builtins will not change.
-			auto hashee = ManagedPyo(PyUnicode_FromString(name.c_str()));
-			bltin_cache_slot = PyDict_GetItem(blt, hashee.borrow());
-		}
-		virtual std::string pretty_print() {
-			return "ldg $" + std::to_string(dst) + " <- " + name;
-		}
-		YAPYJIT_IR_COMMON(LoadGlobalIns);
-	};
+	inline auto error_prop_ins() {
+		return bytes(InsnTag::ErrorProp);
+	}
 
-	class StoreGlobalIns : public InsnWithTag<InsnTag::STOREGLOBAL> {
-	public:
-		int src;
-		std::string name;
-		StoreGlobalIns(int src_local_id, const std::string& name_)
-			: src(src_local_id), name(name_) {
-		}
-		virtual std::string pretty_print() {
-			return "stg " + name + " <- $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(StoreGlobalIns);
-	};
+	inline auto clear_error_ctx_ins() {
+		return bytes(InsnTag::ClearErrorCtx);
+	}
 
-	class LoadClosureIns : public InsnWithTag<InsnTag::LOADCLOSURE> {
-	public:
-		int dst;
-		std::string name;
-		LoadClosureIns(int dst_local_id, const std::string& name_)
-			: dst(dst_local_id), name(name_) {
-		}
-		virtual std::string pretty_print() {
-			return "ldc $" + std::to_string(dst) + " <- " + name;
-		}
-		YAPYJIT_IR_COMMON(LoadClosureIns);
-	};
+	inline auto set_error_label_ins(iaddr_t addr = L_PLACEHOLDER) {
+		return bytes(InsnTag::SetErrorLabel, addr);
+	}
 
-	class StoreClosureIns : public InsnWithTag<InsnTag::STORECLOSURE> {
-	public:
-		int src;
-		std::string name;
-		StoreClosureIns(int src_local_id, const std::string& name_)
-			: src(src_local_id), name(name_) {
-		}
-		virtual std::string pretty_print() {
-			return "stc " + name + " <- $" + std::to_string(src);
-		}
-		YAPYJIT_IR_COMMON(StoreClosureIns);
-	};
+	inline auto prolog_ins() {
+		return bytes(InsnTag::Prolog);
+	}
 
-	class CallIns : public InsnWithTag<InsnTag::CALL> {
-	public:
-		int dst, func;
-		std::vector<int> args;
-		std::map<std::string, int> kwargs;
-		CallIns(int dst_local_id, int func_local_id)
-			: dst(dst_local_id), func(func_local_id) {
-		}
-		virtual std::string pretty_print() {
-			std::string res = "call $" + std::to_string(dst) + " <- $" + std::to_string(func) + "(";
-			bool first = true;
-			for (auto arg : args) {
-				if (!first) res += ", ";
-				first = false;
-				res += "$" + std::to_string(arg);
-			}
-			for (const auto& kwarg : kwargs) {
-				if (!first) res += ", ";
-				first = false;
-				res += kwarg.first + "=$" + std::to_string(kwarg.second);
-			}
-			return res + ")";
-		}
-		YAPYJIT_IR_COMMON(CallIns);
-	};
-
-	class CheckErrorTypeIns : public InsnWithTag<InsnTag::CHECKERRORTYPE> {
-	public:
-		LabelIns* failjump;
-		int dst, ty;
-		CheckErrorTypeIns(LabelIns* fail, int dst_local_id, int ty_local_id) :
-			failjump(fail), dst(dst_local_id), ty(ty_local_id) { }
-		virtual std::string pretty_print() {
-			std::string res = "chkerr $" + std::to_string(ty) + " ?> $" + std::to_string(dst) + "; " + failjump->pretty_print();
-			return res;
-		}
-		YAPYJIT_IR_COMMON(CheckErrorTypeIns);
-	};
-
-	class ErrorPropIns : public InsnWithTag<InsnTag::ERRORPROP> {
-	public:
-		virtual std::string pretty_print() {
-			return "errorprop";
-		}
-		YAPYJIT_IR_COMMON(ErrorPropIns);
-	};
-
-	class ClearErrorCtxIns : public InsnWithTag<InsnTag::CLEARERRORCTX> {
-	public:
-		virtual std::string pretty_print() {
-			return "clearerrorctx";
-		}
-		YAPYJIT_IR_COMMON(ClearErrorCtxIns);
-	};
-
-	class SetErrorLabelIns : public InsnWithTag<InsnTag::V_SETERRLAB> {
-	public:
-		LabelIns* target;
-		SetErrorLabelIns(LabelIns* target_) : target(target_) {}
-		virtual std::string pretty_print() {
-			return "v.seterrlab " + (!target ? "[default]" : target->pretty_print());
-		}
-		YAPYJIT_IR_COMMON(SetErrorLabelIns);
-	};
-
-	class EpilogueIns : public InsnWithTag<InsnTag::V_EPILOG> {
-	public:
-		virtual std::string pretty_print() {
-			return "epilogue";
-		}
-		YAPYJIT_IR_COMMON(EpilogueIns);
-		virtual bool control_leaves() { return true; }
-	};
+	inline auto epilog_ins() {
+		return bytes(InsnTag::Epilog);
+	}
 
 	class PBlock {
 	public:
 		virtual void emit_exit(Function& appender) = 0;
 	};
-	class Function {
+
+	class WeakSerializer {
 	public:
-		ManagedPyo globals_ns, deref_ns;
-		ManagedPyo py_cls;
-		std::string name;
-		std::vector<std::unique_ptr<Instruction>> instructions;
-		std::map<std::string, int> locals;  // ID is local register index
-		std::map<int, MIR_type_t> unboxed_local_type_map;
-		std::map<std::string, int> closure;  // ID is deref ns index
-		std::set<std::string> globals;
-		std::map<std::string, int> slot_offsets;
-		int nargs;
-		/*struct {
-			LabelIns* cont_pt, * break_pt, *error_start;
-		} ctx;*/
-		std::vector<std::unique_ptr<PBlock>> pblocks;
-		// TODO: emit context is messy
-		std::unique_ptr<MIRFunction> emit_ctx;
-		MIRContext* mir_ctx;  // TODO: leak
-		std::vector<ManagedPyo> emit_keeprefs;
-		std::vector<std::unique_ptr<char[]>> fill_memory;
-		MIRRegOp return_reg, deopt_reg;
-		MIRLabelOp epilogue_label;
-		MIRLabelOp error_label;
-		bool tracing_enabled_p;
-		std::map<LabelIns*, MIRLabelOp> emit_label_map;
+		std::vector<uint8_t> buffer;
 
-		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
-			globals_ns(globals_ns_), deref_ns(deref_ns_),
-			py_cls(Py_None, true), name(name_), nargs(nargs_), mir_ctx(nullptr),
-			return_reg(0), deopt_reg(0), epilogue_label(nullptr), error_label(nullptr),
-			tracing_enabled_p(false) {}
-
-		// Consumes ownership. Recommended to use only with `new` instructions.
-		void new_insn(Instruction * insn) {
-			instructions.push_back(std::unique_ptr<Instruction>(insn));
+		template<size_t size>
+		void append(const std::array<uint8_t, size>& src) {
+			buffer.insert(buffer.end(), src.begin(), src.end());
 		}
 
-		void add_insn(std::unique_ptr<Instruction> insn) {
-			instructions.push_back(std::move(insn));
+		template<typename T>
+		void append(const std::vector<T>& src) {
+			static_assert(std::is_arithmetic<T>::value, "Only arithmetic vectors are allowed");
+			buffer.insert(
+				buffer.end(),
+				reinterpret_cast<const uint8_t*>(src.data()),
+				reinterpret_cast<const uint8_t*>(src.data() + src.size())
+			);
 		}
 
-		void* allocate_fill(size_t size) {
-			char* fill = new char[size]();
-			fill_memory.push_back(std::unique_ptr<char[]>(fill));
-			return fill;
+		void append(const std::string& s) {
+			auto cstr = s.c_str();
+			buffer.insert(buffer.end(), cstr, cstr + s.size() + 1);
+		}
+
+		template<typename T>
+		void append(const std::map<std::string, T>& strmap) {
+			static_assert(std::is_arithmetic<T>::value, "Only arithmetic strmaps are allowed");
+			for (const auto& pair : strmap) {
+				append(pair.first);
+				append(bytes(pair.second));
+			}
+		}
+
+		template<typename T1, typename T2>
+		void append(std::tuple<T1, T2> src) {
+			append(std::get<0>(src));
+			append(std::get<1>(src));
+		}
+
+		template<typename T1, typename T2, typename T3>
+		void append(std::tuple<T1, T2, T3> src) {
+			append(std::get<0>(src));
+			append(std::get<1>(src));
+			append(std::get<2>(src));
 		}
 	};
 
-	inline int new_temp_var(Function& appender) {
-		for (int i = (int)appender.locals.size();; i++) {
+	class Function {
+	protected:
+		WeakSerializer bytecode_serializer;
+	public:
+		ManagedPyo globals_ns, deref_ns;
+		std::string name;
+		std::map<std::string, local_t> locals;  // ID is local register index
+		std::map<std::string, local_t> closure;  // ID is deref ns index
+		std::set<std::string> globals;
+		std::vector<std::unique_ptr<PBlock>> pblocks;
+
+		std::vector<uint8_t>& bytecode() { return bytecode_serializer.buffer; }
+
+		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_) :
+			globals_ns(globals_ns_), deref_ns(deref_ns_), name(name_) {}
+
+		// Get address of the next instruction.
+		iaddr_t next_addr() { return static_cast<iaddr_t>(bytecode().size()); }
+
+		template<typename T>
+		iaddr_t add_insn(T structure) {
+			auto addr = next_addr();
+			bytecode_serializer.append(structure);
+			return addr;
+		}
+
+		template<typename T>
+		std::tuple<iaddr_t, iaddr_t*> add_insn_addr_and_label(T structure) {
+			auto addr = add_insn(structure);
+			return std::make_tuple(
+				addr,
+				reinterpret_cast<iaddr_t*>(&bytecode()[next_addr() - sizeof(iaddr_t)])
+			);
+		}
+
+		template<typename T>
+		iaddr_t * add_insn_label(T structure) {
+			add_insn(structure);
+			return reinterpret_cast<iaddr_t*>(&bytecode()[next_addr() - sizeof(iaddr_t)]);
+		}
+	};
+
+	inline local_t new_temp_var(Function& appender) {
+		if (appender.locals.size() >= INT16_MAX - 2)
+			throw std::runtime_error("More than 32766 variables are required for one method. This is not supported.");
+		for (auto i = appender.locals.size();; i++) {
 			const auto insert_res = appender.locals.insert(
-				{ "_yapyjit_loc_" + std::to_string(i), (int)appender.locals.size() + 1 }
+				{ "_yapyjit_loc_" + std::to_string(i), (local_t)(appender.locals.size() + 1) }
 			);
 			if (insert_res.second) {
 				return insert_res.first->second;
