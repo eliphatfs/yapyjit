@@ -159,7 +159,7 @@ namespace yapyjit {
 				);
 			}
 			TARGET(BinOp) {
-				Op2ary op = Op2ary::_from_string(
+				InsnTag op = InsnTag::_from_string(
 					ast_man.attr("op").type().attr("__name__").to_cstr()
 				);
 				return std::make_unique<BinOp>(
@@ -169,7 +169,7 @@ namespace yapyjit {
 				);
 			}
 			TARGET(UnaryOp) {
-				Op1ary op = Op1ary::_from_string(
+				InsnTag op = InsnTag::_from_string(
 					ast_man.attr("op").type().attr("__name__").to_cstr()
 				);
 				return std::make_unique<UnaryOp>(
@@ -228,9 +228,9 @@ namespace yapyjit {
 				return lower_comprehension(ast_man, init_callable, add_callable, 1);
 			}
 			TARGET(Compare) {
-				std::vector<OpCmp> ops{};
+				std::vector<InsnTag> ops{};
 				for (auto op : ast_man.attr("ops")) {
-					ops.push_back(OpCmp::_from_string(op.type().attr("__name__").to_cstr()));
+					ops.push_back(InsnTag::_from_string(op.type().attr("__name__").to_cstr()));
 				}
 				std::vector<std::unique_ptr<AST>> values{};
 				values.push_back(ast_py2native(ast_man.attr("left")));
@@ -487,7 +487,7 @@ namespace yapyjit {
 				// Currently a poly-fill: a @= b -> a = a @ b
 				// But in some cases results will differ
 				// Performance may differ as well such as [list] += [short list]
-				Op2ary op = Op2ary::_from_string(
+				InsnTag op = InsnTag::_from_string(
 					ast_man.attr("op").type().attr("__name__").to_cstr()
 				);
 				std::unique_ptr<AST> binop = std::make_unique<BinOp>(

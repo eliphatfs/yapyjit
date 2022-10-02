@@ -49,7 +49,7 @@ namespace yapyjit {
 	public:
 		virtual ~AST() = default;
 		virtual ASTTag tag() = 0;
-		virtual int emit_ir(Function& appender) { return -1; }
+		virtual local_t emit_ir(Function& appender) { return -1; }
 	};
 
 	inline void assn_ir(Function& appender, AST* dst, int src);
@@ -57,13 +57,13 @@ namespace yapyjit {
 
 	class LoopBlock : public PBlock {
 	public:
-		LabelIns* cont_pt, * break_pt;
+		iaddr_t cont_pt, break_pt;
 		virtual void emit_exit(Function& appender) { }
 	};
 
 	class ErrorHandleBlock : public PBlock {
 	public:
-		LabelIns* err_start;
+		iaddr_t err_start;
 		std::vector<AST*> finalbody;
 		virtual void emit_exit(Function& appender) {
 			for (auto astptr : finalbody) {
@@ -89,28 +89,28 @@ namespace yapyjit {
 		BoolOp(std::unique_ptr<AST>&& left_, std::unique_ptr<AST>&& right_, OpBool op_)
 			: a(std::move(left_)), b(std::move(right_)), op(op_) {}
 
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class BinOp : public ASTWithTag<ASTTag::BINOP> {
 	public:
 		std::unique_ptr<AST> left, right;
-		Op2ary op;
+		InsnTag op;
 
-		BinOp(std::unique_ptr<AST>&& left_, std::unique_ptr<AST>&& right_, Op2ary op_)
+		BinOp(std::unique_ptr<AST>&& left_, std::unique_ptr<AST>&& right_, InsnTag op_)
 			: left(std::move(left_)), right(std::move(right_)), op(op_) {}
 
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class UnaryOp : public ASTWithTag<ASTTag::UNARYOP> {
 	public:
 		std::unique_ptr<AST> operand;
-		Op1ary op;
+		InsnTag op;
 
-		UnaryOp(std::unique_ptr<AST>&& operand_, Op1ary op_)
+		UnaryOp(std::unique_ptr<AST>&& operand_, InsnTag op_)
 			: operand(std::move(operand_)), op(op_) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class IfExp : public ASTWithTag<ASTTag::IFEXP> {
@@ -119,7 +119,7 @@ namespace yapyjit {
 
 		IfExp(std::unique_ptr<AST>&& test_, std::unique_ptr<AST>&& body_, std::unique_ptr<AST>&& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Dict : public ASTWithTag<ASTTag::DICT> {
@@ -130,7 +130,7 @@ namespace yapyjit {
 			: keys(std::move(keys_)), values(std::move(values_)) {
 			assert(keys.size() == values.size());
 		}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	template<int T_build_mode, int T_tag>
@@ -140,7 +140,7 @@ namespace yapyjit {
 		Buildable1D(std::vector<std::unique_ptr<AST>>& elts_)
 			: elts(std::move(elts_)) {
 		}
-		virtual int emit_ir(Function& appender) {
+		virtual local_t emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
 			auto ins = new BuildIns(
 				result, BuildInsMode::_from_integral(T_build_mode)
@@ -153,31 +153,31 @@ namespace yapyjit {
 		}
 	};
 
-	class List : public Buildable1D<BuildInsMode::LIST, ASTTag::LIST> {
+	class List : public Buildable1D<InsnTag::BuildList, ASTTag::LIST> {
 	public:
 		List(std::vector<std::unique_ptr<AST>>& elts_) : Buildable1D(elts_) {}
 	};
 
-	class Tuple : public Buildable1D<BuildInsMode::TUPLE, ASTTag::TUPLE> {
+	class Tuple : public Buildable1D<InsnTag::BuildTuple, ASTTag::TUPLE> {
 	public:
 		Tuple(std::vector<std::unique_ptr<AST>>& elts_) : Buildable1D(elts_) {}
 	};
 
-	class Set : public Buildable1D<BuildInsMode::SET, ASTTag::SET> {
+	class Set : public Buildable1D<InsnTag::BuildSet, ASTTag::SET> {
 	public:
 		Set(std::vector<std::unique_ptr<AST>>& elts_) : Buildable1D(elts_) {}
 	};
 
 	class Compare : public ASTWithTag<ASTTag::COMPARE> {
 	public:
-		std::vector<OpCmp> ops;
+		std::vector<InsnTag> ops;
 		std::vector<std::unique_ptr<AST>> comparators;
 
-		Compare(std::vector<OpCmp>& ops_, std::vector<std::unique_ptr<AST>>& comparators_)
+		Compare(std::vector<InsnTag>& ops_, std::vector<std::unique_ptr<AST>>& comparators_)
 			: ops(std::move(ops_)), comparators(std::move(comparators_)) {
 			assert(ops.size() + 1 == comparators.size());
 		}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Call : public ASTWithTag<ASTTag::CALL> {
@@ -203,7 +203,7 @@ namespace yapyjit {
 			args.push_back(std::move(arg0));
 		}
 
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Name : public ASTWithTag<ASTTag::NAME> {
@@ -211,7 +211,7 @@ namespace yapyjit {
 		std::string identifier;
 
 		Name(const std::string& identifier_): identifier(identifier_) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Attribute : public ASTWithTag<ASTTag::ATTR> {
@@ -221,7 +221,7 @@ namespace yapyjit {
 
 		Attribute(std::unique_ptr<AST>&& expr_, const std::string& attr_)
 			: expr(std::move(expr_)), attr(attr_) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Subscript : public ASTWithTag<ASTTag::SUBSCR> {
@@ -231,7 +231,7 @@ namespace yapyjit {
 
 		Subscript(std::unique_ptr<AST>&& expr_, std::unique_ptr<AST>&& slice_)
 			: expr(std::move(expr_)), slice(std::move(slice_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Constant : public ASTWithTag<ASTTag::CONST> {
@@ -239,7 +239,7 @@ namespace yapyjit {
 		ManagedPyo value;
 
 		Constant(const ManagedPyo& value_) : value(value_) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Return : public ASTWithTag<ASTTag::RETURN> {
@@ -247,7 +247,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> expr;
 		Return(std::unique_ptr<AST>&& expr_)
 			: expr(std::move(expr_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class NamedExpr : public ASTWithTag<ASTTag::NAMEDEXPR> {
@@ -256,7 +256,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> target;
 		NamedExpr(std::unique_ptr<AST>&& expr_, std::unique_ptr<AST>&& target_)
 			: expr(std::move(expr_)), target(std::move(target_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Assign : public ASTWithTag<ASTTag::ASSIGN> {
@@ -271,7 +271,7 @@ namespace yapyjit {
 			: expr(std::move(expr_)) {
 			targets.push_back(std::move(target));
 		}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Delete : public ASTWithTag<ASTTag::DELETE> {
@@ -279,13 +279,13 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> targets;
 		Delete(std::vector<std::unique_ptr<AST>>& targets_)
 			: targets(std::move(targets_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Pass : public ASTWithTag<ASTTag::PASS> {
 	public:
 		Pass() {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class For : public ASTWithTag<ASTTag::FOR> {
@@ -296,7 +296,7 @@ namespace yapyjit {
 		For(std::unique_ptr<AST>&& target_, std::unique_ptr<AST> iter_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: target(std::move(target_)), iter(std::move(iter_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
 
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class While : public ASTWithTag<ASTTag::WHILE> {
@@ -306,15 +306,15 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> orelse;
 		While(std::unique_ptr<AST>&& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Break : public ASTWithTag<ASTTag::BREAK> {
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Continue : public ASTWithTag<ASTTag::CONTINUE> {
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class If : public ASTWithTag<ASTTag::IF> {
@@ -324,7 +324,7 @@ namespace yapyjit {
 		std::vector<std::unique_ptr<AST>> orelse;
 		If(std::unique_ptr<AST>&& test_, std::vector<std::unique_ptr<AST>>& body_, std::vector<std::unique_ptr<AST>>& orelse_)
 			: test(std::move(test_)), body(std::move(body_)), orelse(std::move(orelse_)) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class Raise : public ASTWithTag<ASTTag::RAISE> {
@@ -332,7 +332,7 @@ namespace yapyjit {
 		std::unique_ptr<AST> exc;
 		Raise(std::unique_ptr<AST>&& exc_) : exc(std::move(exc_)) {
 		}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 	
 	struct ExceptHandler {
@@ -345,14 +345,14 @@ namespace yapyjit {
 	public:
 		std::vector<std::unique_ptr<AST>> body, orelse, finalbody;
 		std::vector<ExceptHandler> handlers;
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class ValueBlock : public ASTWithTag<ASTTag::EXT_VALUEBLOCK> {
 	public:
 		// A block. Its value is the last expression.
 		std::vector<std::unique_ptr<AST>> body_stmts;
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 		void new_stmt(AST* nast) {
 			body_stmts.push_back(std::unique_ptr<AST>(nast));
 		}
@@ -362,7 +362,7 @@ namespace yapyjit {
 	public:
 		std::vector<std::string> names;
 		Global(const std::vector<std::string>& names_) : names(names_) {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 	};
 
 	class FuncDef : public ASTWithTag<ASTTag::FUNCDEF> {
@@ -371,7 +371,7 @@ namespace yapyjit {
 		std::vector<std::string> args;
 		std::vector<std::unique_ptr<AST>> body_stmts;
 		FuncDef() {}
-		virtual int emit_ir(Function& appender);
+		virtual local_t emit_ir(Function& appender);
 		std::unique_ptr<Function> emit_ir_f(ManagedPyo pyfunc);
 	};
 };
