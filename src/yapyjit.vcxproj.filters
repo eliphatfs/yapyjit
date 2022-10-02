@@ -15,28 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pybind_jitted_func.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ir_opt.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ast_py2native.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ir_gen.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="yapyjit.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ast_emit_ir.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ir_recompile.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ir_operand_info.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -66,9 +51,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\gen_common.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\pybind_jitted_func.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

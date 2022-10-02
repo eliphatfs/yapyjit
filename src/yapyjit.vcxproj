@@ -117,7 +117,7 @@
     <LocalDebuggerEnvironment>PYTHONPATH=$(OutDir)</LocalDebuggerEnvironment>
     <DebuggerFlavor>$(DefaultDebuggerFlavor)</DebuggerFlavor>
     <IncludePath>I:\ScarletX\yapyjit\include;$(IncludePath)</IncludePath>
-    <LibraryPath>I:\CondaM\libs;$(LibraryPath)</LibraryPath>
+    <LibraryPath>D:\CondaM\libs;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>yapyjit</TargetName>
@@ -127,7 +127,7 @@
     <LocalDebuggerEnvironment>PYTHONPATH=$(OutDir)</LocalDebuggerEnvironment>
     <DebuggerFlavor>$(DefaultDebuggerFlavor)</DebuggerFlavor>
     <IncludePath>I:\ScarletX\yapyjit\include;$(IncludePath)</IncludePath>
-    <LibraryPath>I:\CondaM\libs;$(LibraryPath)</LibraryPath>
+    <LibraryPath>D:\CondaM\libs;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -148,7 +148,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary Condition="$(PythonCoreDVersion) == ''">MultithreadedDLL</RuntimeLibrary>
-      <AdditionalIncludeDirectories>I:\ScarletX\yapyjit\mir;I:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>I:\ScarletX\yapyjit\mir;D:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -184,7 +184,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <RuntimeLibrary>Multithreaded</RuntimeLibrary>
-      <AdditionalIncludeDirectories>I:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\CondaM\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
@@ -200,11 +200,6 @@
   <ItemGroup>
     <ClCompile Include="ast_emit_ir.cpp" />
     <ClCompile Include="ast_py2native.cpp" />
-    <ClCompile Include="ir_gen.cpp" />
-    <ClCompile Include="ir_operand_info.cpp" />
-    <ClCompile Include="ir_opt.cpp" />
-    <ClCompile Include="ir_recompile.cpp" />
-    <ClCompile Include="pybind_jitted_func.cpp" />
     <ClCompile Include="yapyjit.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -216,7 +211,6 @@
     <ClInclude Include="..\include\pyast.h" />
     <ClInclude Include="..\include\enum.h" />
     <ClInclude Include="..\include\ir.h" />
-    <ClInclude Include="..\include\pybind_jitted_func.h" />
     <ClInclude Include="..\include\yapyjit.h" />
   </ItemGroup>
   <ItemGroup>
