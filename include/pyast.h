@@ -52,26 +52,6 @@ namespace yapyjit {
 		virtual local_t emit_ir(Function& appender) { return -1; }
 	};
 
-	inline void assn_ir(Function& appender, AST* dst, int src);
-	inline void del_ir(Function& appender, AST* dst);
-
-	class LoopBlock : public PBlock {
-	public:
-		iaddr_t cont_pt, break_pt;
-		virtual void emit_exit(Function& appender) { }
-	};
-
-	class ErrorHandleBlock : public PBlock {
-	public:
-		iaddr_t err_start;
-		std::vector<AST*> finalbody;
-		virtual void emit_exit(Function& appender) {
-			for (auto astptr : finalbody) {
-				astptr->emit_ir(appender);
-			}
-		}
-	};
-
 	template<int T_tag>
 	class ASTWithTag: public AST {
 		virtual ASTTag tag() { return ASTTag::_from_integral(T_tag); }
@@ -142,13 +122,11 @@ namespace yapyjit {
 		}
 		virtual local_t emit_ir(Function& appender) {
 			int result = new_temp_var(appender);
-			auto ins = new BuildIns(
-				result, BuildInsMode::_from_integral(T_build_mode)
-			);
+			std::vector<local_t> args;
 			for (size_t i = 0; i < elts.size(); i++) {
-				ins->args.push_back(elts[i]->emit_ir(appender));
+				args.push_back(elts[i]->emit_ir(appender));
 			}
-			appender.new_insn(ins);
+			appender.add_insn(build_ins(InsnTag::_from_integral(T_build_mode), result, args));
 			return result;
 		}
 	};

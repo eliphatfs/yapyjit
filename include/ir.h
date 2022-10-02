@@ -84,9 +84,20 @@ namespace yapyjit {
 	}
 
 	typedef int16_t local_t;
-	typedef uint32_t iaddr_t;
-
+	typedef int32_t iaddr_t;
 	const iaddr_t L_PLACEHOLDER = 0;
+	class ilabel_t final {
+	private:
+		std::vector<uint8_t>* container;
+		iaddr_t offset;
+	public:
+		ilabel_t(): container(nullptr), offset(L_PLACEHOLDER) { }
+		ilabel_t(std::vector<uint8_t>& container_, iaddr_t offset_): container(&container_), offset(offset_) { }
+		iaddr_t& operator*() { return *reinterpret_cast<iaddr_t*>(&container->at(offset)); }
+		bool valid() { return container != nullptr && offset > 0; }
+	};
+
+	class Function;
 
 	inline auto raise_ins(local_t local_id) {
 		return bytes(InsnTag::Raise, local_id);
@@ -148,12 +159,12 @@ namespace yapyjit {
 		return bytes(InsnTag::IterNext, dst_local_id, iter_local_id, iter_fail_to);
 	}
 
-	inline auto build_ins(InsnTag mode, local_t dst_local_id, const std::vector<short>& args) {
+	inline auto build_ins(InsnTag mode, local_t dst_local_id, const std::vector<local_t>& args) {
 		if (args.size() > UINT8_MAX) throw std::runtime_error("Build instruction with more than 255 targets.");
 		return std::make_tuple(bytes(mode, dst_local_id, (uint8_t)args.size()), args);
 	}
 
-	inline auto destruct_ins(local_t src_local_id, const std::vector<short>& dests) {
+	inline auto destruct_ins(local_t src_local_id, const std::vector<local_t>& dests) {
 		if (dests.size() > UINT8_MAX) throw std::runtime_error("Destruct instruction with more than 255 targets.");
 		return std::make_tuple(bytes(InsnTag::Destruct, src_local_id, (uint8_t)dests.size()), dests);
 	}
@@ -183,7 +194,9 @@ namespace yapyjit {
 		return bytes(InsnTag::StoreClosure, src_local_id, closure_id);
 	}
 
-	inline auto call_ins(local_t dst_local_id, local_t func_local_id, const std::vector<short>& args, const std::map<std::string, short>& kwargs) {
+	inline auto call_ins(local_t dst_local_id, local_t func_local_id, const std::vector<local_t>& args, const std::map<std::string, local_t>& kwargs) {
+		if (args.size() > UINT8_MAX) throw std::runtime_error("Call instruction with more than 255 args.");
+		if (kwargs.size() > UINT8_MAX) throw std::runtime_error("Call instruction with more than 255 kwargs.");
 		return std::make_tuple(
 			bytes(InsnTag::Call, dst_local_id, func_local_id, (uint8_t)args.size(), (uint8_t)kwargs.size()),
 			args, kwargs
@@ -275,12 +288,13 @@ namespace yapyjit {
 		std::map<std::string, local_t> locals;  // ID is local register index
 		std::map<std::string, local_t> closure;  // ID is deref ns index
 		std::set<std::string> globals;
-		std::vector<std::unique_ptr<PBlock>> pblocks;
+		std::vector<PBlock*> pblocks;
+		int nargs;
 
 		std::vector<uint8_t>& bytecode() { return bytecode_serializer.buffer; }
 
-		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_) :
-			globals_ns(globals_ns_), deref_ns(deref_ns_), name(name_) {}
+		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
+			globals_ns(globals_ns_), deref_ns(deref_ns_), name(name_), nargs(nargs_) {}
 
 		// Get address of the next instruction.
 		iaddr_t next_addr() { return static_cast<iaddr_t>(bytecode().size()); }
@@ -293,18 +307,18 @@ namespace yapyjit {
 		}
 
 		template<typename T>
-		std::tuple<iaddr_t, iaddr_t*> add_insn_addr_and_label(T structure) {
+		std::tuple<iaddr_t, ilabel_t> add_insn_addr_and_label(T structure) {
 			auto addr = add_insn(structure);
 			return std::make_tuple(
 				addr,
-				reinterpret_cast<iaddr_t*>(&bytecode()[next_addr() - sizeof(iaddr_t)])
+				ilabel_t(bytecode(), next_addr() - sizeof(iaddr_t))
 			);
 		}
 
 		template<typename T>
-		iaddr_t * add_insn_label(T structure) {
+		ilabel_t add_insn_label(T structure) {
 			add_insn(structure);
-			return reinterpret_cast<iaddr_t*>(&bytecode()[next_addr() - sizeof(iaddr_t)]);
+			return ilabel_t(bytecode(), next_addr() - sizeof(iaddr_t));
 		}
 	};
 

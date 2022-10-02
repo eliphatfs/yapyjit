@@ -22,11 +22,10 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
 
     auto ir = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc), ManagedPyo(pyfunc, true));
     
-    std::stringstream ss;
-    for (auto& insn : ir->instructions) {
-        ss << insn->pretty_print() << std::endl;
-    }
-    return PyUnicode_FromString(ss.str().c_str());
+    return PyBytes_FromStringAndSize(
+        reinterpret_cast<char*>(ir->bytecode().data()),
+        ir->bytecode().size()
+    );
 }
 
 /*

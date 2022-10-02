@@ -1,212 +1,202 @@
 #include <pyast.h>
 
 namespace yapyjit {
-	int BoolOp::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
+
+	void assn_ir(Function& appender, AST* dst, local_t src);
+	void del_ir(Function& appender, AST* dst);
+
+	class LoopBlock : public PBlock {
+	public:
+		std::vector<ilabel_t> cont_pts, break_pts;
+		virtual void emit_exit(Function& appender) { }
+	};
+
+	class ErrorHandleBlock : public PBlock {
+	public:
+		std::vector<ilabel_t> err_starts;
+		std::vector<AST*> finalbody;
+		virtual void emit_exit(Function& appender) {
+			for (auto astptr : finalbody) {
+				astptr->emit_ir(appender);
+			}
+		}
+	};
+
+	local_t BoolOp::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
 		// a && b
 		// a; mov rs; jt b; j end; b; mov rs; end;
 		if (op == +OpBool::And) {
-			auto lab_b = std::make_unique<LabelIns>(),
-				lab_e = std::make_unique<LabelIns>();
-			int a_rs = a->emit_ir(appender);
-			appender.new_insn(new MoveIns(result, a_rs));
-			appender.new_insn(new JumpTruthyIns(
-				lab_b.get(), a_rs
-			));
-			appender.new_insn(new JumpIns(
-				lab_e.get()
-			));
-			appender.add_insn(std::move(lab_b));
-			int b_rs = b->emit_ir(appender);
-			appender.new_insn(new MoveIns(result, b_rs));
-			appender.add_insn(std::move(lab_e));
+			local_t a_rs = a->emit_ir(appender);
+			appender.add_insn(move_ins(result, a_rs));
+			auto lab_b = appender.add_insn_label(jump_truthy_ins(a_rs));
+			auto lab_e = appender.add_insn_label(jump_ins());
+			*lab_b = appender.next_addr();
+			local_t b_rs = b->emit_ir(appender);
+			appender.add_insn(move_ins(result, b_rs));
+			*lab_e = appender.next_addr();
 		}
 		// a || b
 		// a; mov rs; jt end; b; mov rs; end;
 		else {
 			assert(op == +OpBool::Or);
 
-			auto lab_e = std::make_unique<LabelIns>();
-			int a_rs = a->emit_ir(appender);
-			appender.new_insn(new MoveIns(result, a_rs));
-			appender.new_insn(new JumpTruthyIns(
-				lab_e.get(), a_rs
-			));
-			int b_rs = b->emit_ir(appender);
-			appender.new_insn(new MoveIns(result, b_rs));
-			appender.add_insn(std::move(lab_e));
+			local_t a_rs = a->emit_ir(appender);
+			appender.add_insn(move_ins(result, a_rs));
+			auto lab_e = appender.add_insn_label(jump_truthy_ins(a_rs));
+			local_t b_rs = b->emit_ir(appender);
+			appender.add_insn(move_ins(result, b_rs));
+			*lab_e = appender.next_addr();
 		}
 		return result;
 	}
-	int BinOp::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
-		appender.new_insn(new BinOpIns(
-			result, op,
+	local_t BinOp::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
+		appender.add_insn(binop_ins(
+			op, result,
 			left->emit_ir(appender),
 			right->emit_ir(appender)
 		));
 		return result;
 	}
-	int UnaryOp::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
-		appender.new_insn(new UnaryOpIns(
-			result, op, operand->emit_ir(appender)
+	local_t UnaryOp::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
+		appender.add_insn(unaryop_ins(
+			op, result, operand->emit_ir(appender)
 		));
 		return result;
 	}
-	int IfExp::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
+	local_t IfExp::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
 		// test ? body : orelse
 		// test; jt body; orelse; mov rs; j end; body; mov rs; end;
-		int test_rs = test->emit_ir(appender);
-		auto lab_body = std::make_unique<LabelIns>(),
-			lab_e = std::make_unique<LabelIns>();
-		appender.new_insn(new JumpTruthyIns(
-			lab_body.get(), test_rs
-		));
-		int orelse_rs = orelse->emit_ir(appender);
-		appender.new_insn(new MoveIns(result, orelse_rs));
-		appender.new_insn(new JumpIns(
-			lab_e.get()
-		));
-		appender.add_insn(std::move(lab_body));
-		int body_rs = body->emit_ir(appender);
-		appender.new_insn(new MoveIns(result, body_rs));
-		appender.add_insn(std::move(lab_e));
+		local_t test_rs = test->emit_ir(appender);
+		auto lab_body = appender.add_insn_label(jump_truthy_ins(test_rs));
+		local_t orelse_rs = orelse->emit_ir(appender);
+		appender.add_insn(move_ins(result, orelse_rs));
+		auto lab_e = appender.add_insn_label(jump_ins());
+		*lab_body = appender.next_addr();
+		local_t body_rs = body->emit_ir(appender);
+		appender.add_insn(move_ins(result, body_rs));
+		*lab_e = appender.next_addr();
 		return result;
 	}
-	int Dict::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
-		auto ins = new BuildIns(
-			result, BuildInsMode::DICT
-		);
+	local_t Dict::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
+		std::vector<local_t> build_args;
 		for (size_t i = 0; i < keys.size(); i++) {
-			ins->args.push_back(keys[i]->emit_ir(appender));
-			ins->args.push_back(values[i]->emit_ir(appender));
+			build_args.push_back(keys[i]->emit_ir(appender));
+			build_args.push_back(values[i]->emit_ir(appender));
 		}
-		appender.new_insn(ins);
+		appender.add_insn(build_ins(InsnTag::BuildDict, result, build_args));
 		return result;
 	}
-	int Compare::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
+	local_t Compare::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
 		// r1 op1 r2 op2 r3 ...
 		// cmp1; jt cmp2; j end; cmp2; jt cmp3; ... end
-		auto lab_next = std::make_unique<LabelIns>();
-		auto lab_e = std::make_unique<LabelIns>();
-		std::vector<int> comparators_res;
+		std::vector<ilabel_t> lab_es;
+		std::vector<local_t> comparators_res;
 		for (auto& comparator : comparators) {
 			comparators_res.push_back(comparator->emit_ir(appender));
 		}
 		for (size_t i = 0; i < ops.size(); i++) {
-			appender.new_insn(new CompareIns(
-				result, ops[i], comparators_res[i], comparators_res[i + 1]
+			appender.add_insn(compare_ins(
+				ops[i], result, comparators_res[i], comparators_res[i + 1]
 			));
 			if (i + 1 == ops.size()) break;
-			appender.new_insn(new JumpTruthyIns(
-				lab_next.get(), result
-			));
-			appender.new_insn(new JumpIns(
-				lab_e.get()
-			));
-			appender.add_insn(std::move(lab_next));
-			lab_next = std::make_unique<LabelIns>();
+			auto lab_next = appender.add_insn_label(jump_truthy_ins(result));
+			lab_es.push_back(appender.add_insn_label(jump_ins()));
+			*lab_next = appender.next_addr();
 		}
-		appender.add_insn(std::move(lab_e));
+		for (auto lab_e : lab_es)
+			*lab_e = appender.next_addr();
 		return result;
 	}
-	int Call::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
-		std::vector<int> argvec;
+	local_t Call::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
+		std::vector<local_t> argvec;
 		for (auto& arg : args) {
 			argvec.push_back(arg->emit_ir(appender));
 		}
-		std::map<std::string, int> kwargmap;
+		std::map<std::string, local_t> kwargmap;
 		for (auto& kwarg : kwargs) {
 			kwargmap[kwarg.first] = kwarg.second->emit_ir(appender);
 		}
-		auto call_ins = new CallIns(
-			result, func->emit_ir(appender)
-		);
-		call_ins->args.swap(argvec);
-		call_ins->kwargs.swap(kwargmap);
-		appender.new_insn(call_ins);
+		appender.add_insn(call_ins(result, func->emit_ir(appender), argvec, kwargmap));
 		return result;
 	}
-	int Name::emit_ir(Function& appender) {
+	local_t Name::emit_ir(Function& appender) {
 		const auto ins_pair = appender.locals.insert(
-			{ identifier, (int)appender.locals.size() + 1 }
+			{ identifier, (local_t)(appender.locals.size() + 1) }
 		);
 		if (appender.closure.count(identifier)) {
-			appender.new_insn(new LoadClosureIns(ins_pair.first->second, identifier));
+			appender.add_insn(load_closure_ins(ins_pair.first->second, appender.closure[identifier]));
 		}
 		else if (ins_pair.second) {
 			// Not exist, assume global
+			appender.add_insn(load_global_ins(ins_pair.first->second, identifier));
 			appender.globals.insert(identifier);
 		}
 		return ins_pair.first->second;
 	}
-	int Attribute::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
-		appender.new_insn(new LoadAttrIns(
-			attr, result, expr->emit_ir(appender)
+	local_t Attribute::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
+		appender.add_insn(load_attr_ins(
+			result, expr->emit_ir(appender), attr
 		));
 		return result;
 	}
-	int Subscript::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
+	local_t Subscript::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
 		auto src_tv = expr->emit_ir(appender);
-		appender.new_insn(new LoadItemIns(
-			slice->emit_ir(appender), result, src_tv
+		appender.add_insn(load_item_ins(
+			result, src_tv, slice->emit_ir(appender)
 		));
 		return result;
 	}
-	int Constant::emit_ir(Function& appender) {
-		int result = new_temp_var(appender);
-		appender.new_insn(new ConstantIns(
+	local_t Constant::emit_ir(Function& appender) {
+		local_t result = new_temp_var(appender);
+		appender.add_insn(constant_ins(
 			result,
 			value
 		));
 		return result;
 	}
-	int Return::emit_ir(Function& appender) {
-		int ret = expr->emit_ir(appender);
+	local_t Return::emit_ir(Function& appender) {
+		local_t ret = expr->emit_ir(appender);
 		for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
 			(*it)->emit_exit(appender);
 		}
-		appender.new_insn(new ReturnIns(ret));
+		appender.add_insn(return_ins(ret));
 		return -1;
 	}
-	int NamedExpr::emit_ir(Function& appender) {
-		int src = expr->emit_ir(appender);
+	local_t NamedExpr::emit_ir(Function& appender) {
+		local_t src = expr->emit_ir(appender);
 		assn_ir(appender, target.get(), src);
 		return src;
 	}
-	int Assign::emit_ir(Function& appender) {
-		int src = expr->emit_ir(appender);
+	local_t Assign::emit_ir(Function& appender) {
+		local_t src = expr->emit_ir(appender);
 		for (auto& target : targets) {
 			assn_ir(appender, target.get(), src);
 		}
 		return -1;
 	}
-	int Delete::emit_ir(Function& appender) {
+	local_t Delete::emit_ir(Function& appender) {
 		for (auto& target : targets) {
 			del_ir(appender, target.get());
 		}
 		return -1;
 	}
-	int Pass::emit_ir(Function& appender) {
+	local_t Pass::emit_ir(Function& appender) {
 		return -1;
 	}
-	int For::emit_ir(Function& appender) {
-		auto label_st = std::make_unique<LabelIns>();
-		auto label_body = std::make_unique<LabelIns>();
-		auto label_orelse = std::make_unique<LabelIns>();
-		auto label_ed = std::make_unique<LabelIns>();
-
-		auto loopblock = new LoopBlock();
-		loopblock->cont_pt = label_st.get();
-		loopblock->break_pt = label_ed.get();
-		appender.pblocks.push_back(std::unique_ptr<PBlock>(loopblock));
+	local_t For::emit_ir(Function& appender) {
+		LoopBlock loopblock;
+		// loopblock->cont_pt = label_st.get();
+		// loopblock->break_pt = label_ed.get();
+		appender.pblocks.push_back(&loopblock);
 
 		// for target in iter body orelse end
 		// get_iter; start; fornx orelse; body; j start; orelse; end;
@@ -217,222 +207,215 @@ namespace yapyjit {
 		if (!iterfn) throw std::logic_error(__FUNCTION__" cannot get builtins.iter.");
 
 		auto iterconst = new_temp_var(appender);
-		appender.new_insn(new ConstantIns(iterconst, ManagedPyo(iterfn, true)));
+		appender.add_insn(constant_ins(iterconst, ManagedPyo(iterfn, true)));
 		auto iterobj = new_temp_var(appender);
-		auto call_ins = new CallIns(
-			iterobj, iterconst
-		);
-		call_ins->args.push_back(iter->emit_ir(appender));
-		appender.new_insn(call_ins);
+		appender.add_insn(call_ins(iterobj, iterconst, { iter->emit_ir(appender) }, {}));
 
 		auto target_tmp = new_temp_var(appender);
-		appender.add_insn(std::move(label_st));
-		appender.new_insn(new IterNextIns(label_orelse.get(), target_tmp, iterobj));
+		// appender.add_insn(std::move(label_st));
+		auto [addr_st, label_orelse] = appender.add_insn_addr_and_label(iter_next_ins(target_tmp, iterobj));
 		assn_ir(appender, target.get(), target_tmp);
 
-		appender.add_insn(std::move(label_body));
+		auto addr_body = appender.next_addr();
 		for (auto& stmt : body) stmt->emit_ir(appender);
-		appender.new_insn(new JumpIns(loopblock->cont_pt));
-		appender.add_insn(std::move(label_orelse));
+		appender.add_insn(jump_ins(addr_st));
+		*label_orelse = appender.next_addr();
 		for (auto& stmt : orelse) stmt->emit_ir(appender);
-		appender.add_insn(std::move(label_ed));
 
 		appender.pblocks.pop_back();
+		for (auto& ptr : loopblock.break_pts)
+			*ptr = appender.next_addr();
+		for (auto& ptr : loopblock.cont_pts)
+			*ptr = addr_st;
 		return -1;
 	}
-	int While::emit_ir(Function& appender) {
-		auto label_st = std::make_unique<LabelIns>();
-		auto label_body = std::make_unique<LabelIns>();
-		auto label_orelse = std::make_unique<LabelIns>();
-		auto label_ed = std::make_unique<LabelIns>();
-
-		auto loopblock = new LoopBlock();
-		loopblock->cont_pt = label_st.get();
-		loopblock->break_pt = label_ed.get();
-		appender.pblocks.push_back(std::unique_ptr<PBlock>(loopblock));
+	local_t While::emit_ir(Function& appender) {
+		LoopBlock loopblock;
+		appender.pblocks.push_back(&loopblock);
 
 		// while test body orelse end
 		// start; test; jt body; j orelse; body; j start; orelse; end;
-		appender.add_insn(std::move(label_st));
+		auto addr_st = appender.next_addr();
 		auto test_rs = test->emit_ir(appender);
-		appender.new_insn(new JumpTruthyIns(label_body.get(), test_rs));
-		appender.new_insn(new JumpIns(label_orelse.get()));
-		appender.add_insn(std::move(label_body));
+		auto label_body = appender.add_insn_label(jump_truthy_ins(test_rs));
+		auto label_orelse = appender.add_insn_label(jump_ins());
+		*label_body = appender.next_addr();
 		for (auto& stmt : body) stmt->emit_ir(appender);
-		appender.new_insn(new JumpIns(loopblock->cont_pt));
-		appender.add_insn(std::move(label_orelse));
+		appender.add_insn(jump_ins(addr_st));
+		*label_orelse = appender.next_addr();
 		for (auto& stmt : orelse) stmt->emit_ir(appender);
-		appender.add_insn(std::move(label_ed));
 
+		for (auto& ptr : loopblock.break_pts)
+			*ptr = appender.next_addr();
+		for (auto& ptr : loopblock.cont_pts)
+			*ptr = addr_st;
 		appender.pblocks.pop_back();
 		return -1;
 	}
-	int Break::emit_ir(Function& appender) {
+	local_t Break::emit_ir(Function& appender) {
+		bool valid = false;
 		for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
-			auto loop_blk = dynamic_cast<LoopBlock*>(it->get());
+			auto loop_blk = dynamic_cast<LoopBlock*>(*it);
 			if (loop_blk) {
-				appender.new_insn(new JumpIns(loop_blk->break_pt));
+				loop_blk->break_pts.push_back(appender.add_insn_label(jump_ins()));
+				valid = true;
 				break;
 			}
 			else {
 				(*it)->emit_exit(appender);
 			}
 		}
+		if (!valid) throw std::logic_error("Break outside loop.");
 		return -1;
 	}
-	int Continue::emit_ir(Function& appender) {
+	local_t Continue::emit_ir(Function& appender) {
+		bool valid = false;
 		for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
-			auto loop_blk = dynamic_cast<LoopBlock*>(it->get());
+			auto loop_blk = dynamic_cast<LoopBlock*>(*it);
 			if (loop_blk) {
-				appender.new_insn(new JumpIns(loop_blk->cont_pt));
+				loop_blk->cont_pts.push_back(appender.add_insn_label(jump_ins()));
+				valid = true;
 				break;
 			}
 			else {
 				(*it)->emit_exit(appender);
 			}
 		}
+		if (!valid) throw std::logic_error("Continue outside loop.");
 		return -1;
 	}
-	int If::emit_ir(Function& appender) {
-		int cond = test->emit_ir(appender);
+	local_t If::emit_ir(Function& appender) {
+		local_t cond = test->emit_ir(appender);
 		// if (a) B else C end
 		// a; jt B; C; j end; B; end;
-		auto lab_b = std::make_unique<LabelIns>(),
-			lab_e = std::make_unique<LabelIns>();
-		appender.new_insn(new JumpTruthyIns(lab_b.get(), cond));
+		auto lab_b = appender.add_insn_label(jump_truthy_ins(cond));
 		for (auto& stmt : orelse) {
 			stmt->emit_ir(appender);
 		}
-		appender.new_insn(new JumpIns(lab_e.get()));
-		appender.add_insn(std::move(lab_b));
+		auto lab_e = appender.add_insn_label(jump_ins());
+		*lab_b = appender.next_addr();
 		for (auto& stmt : body) {
 			stmt->emit_ir(appender);
 		}
-		appender.add_insn(std::move(lab_e));
+		*lab_e = appender.next_addr();
 		return -1;
 	}
-	int Raise::emit_ir(Function& appender) {
+	local_t Raise::emit_ir(Function& appender) {
 		if (exc) {
 			auto exc_v = exc->emit_ir(appender);
-			appender.new_insn(new RaiseIns(exc_v));
+			appender.add_insn(raise_ins(exc_v));
 		}
 		else
-			appender.new_insn(new RaiseIns(-1));
+			appender.add_insn(raise_ins(-1));
 		return -1;
 	}
-	int Try::emit_ir(Function& appender) {
-		LabelIns* old_label_err = nullptr;
-		for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
-			auto old_err_blk = dynamic_cast<ErrorHandleBlock*>(it->get());
-			if (old_err_blk) {
-				old_label_err = old_err_blk->err_start;
-				break;
-			}
-		}
+	local_t Try::emit_ir(Function& appender) {
 
-		auto err_blk = new ErrorHandleBlock();
-		auto label_err = std::make_unique<LabelIns>();
-		auto label_blk_next = std::make_unique<LabelIns>();
-		err_blk->err_start = label_err.get();
+		ErrorHandleBlock err_blk;
+		std::vector<ilabel_t> label_blk_next;
 		for (auto& stmt : finalbody)
-			err_blk->finalbody.push_back(stmt.get());
+			err_blk.finalbody.push_back(stmt.get());
 
-		appender.pblocks.push_back(std::unique_ptr<ErrorHandleBlock>(err_blk));
-		appender.new_insn(new SetErrorLabelIns(label_err.get()));
+		appender.pblocks.push_back(&err_blk);
+		auto label_err = appender.add_insn_label(set_error_label_ins());
 		for (auto& stmt : body)
 			stmt->emit_ir(appender);
 		appender.pblocks.pop_back();
-		appender.new_insn(new SetErrorLabelIns(old_label_err));
 
+		auto old_label_errp = appender.add_insn_label(set_error_label_ins());
+
+		for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
+			auto old_err_blk = dynamic_cast<ErrorHandleBlock*>(*it);
+			if (old_err_blk) {
+				old_err_blk->err_starts.push_back(old_label_errp);
+				break;
+			}
+		}
+		
 		for (auto& stmt : orelse)
 			stmt->emit_ir(appender);
-		appender.new_insn(new JumpIns(label_blk_next.get()));
-		appender.add_insn(std::move(label_err));
+		label_blk_next.push_back(appender.add_insn_label(jump_ins()));
+		*label_err = appender.next_addr();
+		for (auto& ptr : err_blk.err_starts) {
+			*ptr = *label_err;
+		}
 		// Start error handlers
 		for (auto& handler : handlers) {
-			auto end = std::make_unique<LabelIns>();
+			ilabel_t end;
 			auto bounderr = new_temp_var(appender);
 			if (handler.type) {
 				auto ty = handler.type->emit_ir(appender);
-				appender.new_insn(new CheckErrorTypeIns(end.get(), bounderr, ty));
+				end = appender.add_insn_label(check_error_type_ins(bounderr, ty));
 				if (handler.name.length() > 0) {
 					auto variable = std::make_unique<Name>(handler.name);
 					assn_ir(appender, variable.get(), bounderr);
 				}
 			}
 			else {
-				appender.new_insn(new CheckErrorTypeIns(end.get(), bounderr, -1));
+				end = appender.add_insn_label(check_error_type_ins(bounderr, -1));
 			}
 			for (auto& stmt : handler.body) {
 				stmt->emit_ir(appender);
 			}
-			appender.new_insn(new JumpIns(label_blk_next.get()));
-			appender.add_insn(std::move(end));
+			label_blk_next.push_back(appender.add_insn_label(jump_ins()));
+			*end = appender.next_addr();
 		}
 		for (auto& stmt : finalbody)
 			stmt->emit_ir(appender);
-		appender.new_insn(new ErrorPropIns());
-		appender.add_insn(std::move(label_blk_next));
+		appender.add_insn(error_prop_ins());
+		for (auto& label : label_blk_next)
+			*label = appender.next_addr();
 		for (auto& stmt : finalbody)
 			stmt->emit_ir(appender);
-		appender.new_insn(new ClearErrorCtxIns());
+		appender.add_insn(clear_error_ctx_ins());
 		return -1;
 	}
-	int ValueBlock::emit_ir(Function& appender) {
-		int result = -1;
+	local_t ValueBlock::emit_ir(Function& appender) {
+		local_t result = -1;
 		for (auto& stmt : body_stmts) {
 			result = stmt->emit_ir(appender);
 		}
 		return result;
 	}
-	int Global::emit_ir(Function& appender) {
+	local_t Global::emit_ir(Function& appender) {
 		for (const auto& name : names) {
 			appender.globals.insert(name);
 		}
 		return -1;
 	}
-	int FuncDef::emit_ir(Function& appender) {
+	local_t FuncDef::emit_ir(Function& appender) {
 		throw std::logic_error("Nested functions are not supported yet");
 	}
 	std::unique_ptr<Function> FuncDef::emit_ir_f(ManagedPyo pyfunc) {
 		auto global_ns = pyfunc.attr("__globals__");
 		auto deref_ns = pyfunc.attr("__closure__");
 		auto appender = std::make_unique<Function>(global_ns, deref_ns, name, static_cast<int>(args.size()));
+
 		for (size_t i = 0; i < args.size(); i++) {
 			appender->locals[args[i]] = (int)i + 1;
 		}
 		if (!(deref_ns == Py_None)) {
-			int idx = 0;
+			local_t idx = 0;
 			for (const auto& closurevar : pyfunc.attr("__code__").attr("co_freevars")) {
 				appender->closure[closurevar.to_cstr()] = idx++;
 			}
 		}
+
+		appender->add_insn(prolog_ins());
 		for (auto& stmt : body_stmts) {
 			stmt->emit_ir(*appender);
 		}
-
 		// Return none if not yet.
 		Return ret_none_default = Return(
 			std::unique_ptr<AST>(new Constant(ManagedPyo(Py_None, true)))
 		);
 		ret_none_default.emit_ir(*appender);
-		appender->new_insn(new EpilogueIns());
+		appender->add_insn(epilog_ins());
 
-		Function prelude = Function(global_ns, deref_ns, name, 0);
-		for (const auto& glob : appender->globals) {
-			prelude.new_insn(new LoadGlobalIns(
-				appender->locals[glob], glob
-			));
-		}
-		appender->instructions.insert(
-			appender->instructions.begin(),
-			std::make_move_iterator(prelude.instructions.begin()),
-			std::make_move_iterator(prelude.instructions.end())
-		);
 		return appender;
 	}
 
-	void assn_ir(Function& appender, AST* dst, int src) {
+	void assn_ir(Function& appender, AST* dst, local_t src) {
 		// TODO: starred, non-local
 		std::vector<std::unique_ptr<AST>>* destruct_targets = nullptr;
 		switch (dst->tag())
@@ -451,29 +434,29 @@ namespace yapyjit {
 			const auto vid = appender.locals.insert(
 				{ id, (int)appender.locals.size() + 1 }
 			).first;  // second is success
-			appender.new_insn(new MoveIns(vid->second, src));
+			appender.add_insn(move_ins(vid->second, src));
 			if (appender.closure.count(id)) {
-				appender.new_insn(new StoreClosureIns(vid->second, id));
+				appender.add_insn(store_closure_ins(vid->second, appender.closure[id]));
 			}
 			else if (appender.globals.count(id)) {
-				appender.new_insn(new StoreGlobalIns(vid->second, id));
+				appender.add_insn(store_global_ins(vid->second, id));
 			}
 			break;
 		}
 		case ASTTag::ATTR: {
 			const Attribute* dst_attr = (Attribute*)dst;
-			appender.new_insn(new StoreAttrIns(
-				dst_attr->attr, dst_attr->expr->emit_ir(appender),
-				src
+			appender.add_insn(store_attr_ins(
+				dst_attr->expr->emit_ir(appender),
+				src, dst_attr->attr
 			));
 			break;
 		}
 		case ASTTag::SUBSCR: {
 			const Subscript* dst_attr = (Subscript*)dst;
 			auto dst_tv = dst_attr->expr->emit_ir(appender);
-			appender.new_insn(new StoreItemIns(
-				dst_attr->slice->emit_ir(appender), dst_tv,
-				src
+			appender.add_insn(store_item_ins(
+				dst_tv,
+				src, dst_attr->slice->emit_ir(appender)
 			));
 			break;
 		}
@@ -490,13 +473,13 @@ namespace yapyjit {
 			);
 		}
 		if (destruct_targets != nullptr) {
-			auto destruction = new DestructIns(src);
+			std::vector<local_t> dests;
 			for (size_t i = 0; i < destruct_targets->size(); i++) {
-				destruction->dests.push_back(new_temp_var(appender));
+				dests.push_back(new_temp_var(appender));
 			}
-			appender.new_insn(destruction);
+			appender.add_insn(destruct_ins(src, dests));
 			for (size_t i = 0; i < destruct_targets->size(); i++) {
-				assn_ir(appender, destruct_targets->at(i).get(), destruction->dests[i]);
+				assn_ir(appender, destruct_targets->at(i).get(), dests[i]);
 			}
 		}
 	}
@@ -507,16 +490,16 @@ namespace yapyjit {
 		case ASTTag::NAME: break;  // No-op for now
 		case ASTTag::ATTR: {
 			const Attribute* dst_attr = (Attribute*)dst;
-			appender.new_insn(new DelAttrIns(
-				dst_attr->attr, dst_attr->expr->emit_ir(appender)
+			appender.add_insn(del_attr_ins(
+				dst_attr->expr->emit_ir(appender), dst_attr->attr
 			));
 			break;
 		}
 		case ASTTag::SUBSCR: {
 			const Subscript* dst_attr = (Subscript*)dst;
 			auto dst_tv = dst_attr->expr->emit_ir(appender);
-			appender.new_insn(new DelItemIns(
-				dst_attr->slice->emit_ir(appender), dst_tv
+			appender.add_insn(del_item_ins(
+				dst_tv, dst_attr->slice->emit_ir(appender)
 			));
 			break;
 		}
