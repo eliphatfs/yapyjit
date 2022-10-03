@@ -31,7 +31,6 @@ class build_ext_subclass(build_ext):
         finally:
             del self.compiler._compile
 
-
 setuptools.setup(
     name="yapyjit",
     version="0.0.1a1",
@@ -52,6 +51,7 @@ setuptools.setup(
         extra_compile_args=cc_args,
         extra_link_args=cl_args
     )],
+    packages=setuptools.find_packages(include=['yapyjit_tools', 'yapyjit_tools.*']),
     include_dirs=["include", "mir"],
     classifiers=[
         "Programming Language :: Python :: 3 :: Only",
