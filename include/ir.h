@@ -30,43 +30,6 @@
 	virtual Instruction* deepcopy() { return new CLS(*this); } \
 
 namespace yapyjit {
-	BETTER_ENUM(
-		InsnTag, uint8_t,
-		Add = 1, Sub, Mult, MatMult, Div, Mod, Pow,
-		LShift, RShift, BitOr, BitXor, BitAnd,
-		FloorDiv,
-		Invert, Not, UAdd, USub,
-		Eq, NotEq, Lt, LtE, Gt, GtE, Is, IsNot, In, NotIn,
-		CheckErrorType,
-		Constant,
-		DelAttr,
-		DelItem,
-		ErrorProp,
-		ClearErrorCtx,
-		IterNext,
-		Jump,
-		JumpTruthy,
-		LoadAttr,
-		LoadClosure,
-		LoadGlobal,
-		LoadItem,
-		Move,
-		Raise,
-		Return,
-		StoreAttr,
-		StoreClosure,
-		StoreGlobal,
-		StoreItem,
-		SetErrorLabel,
-
-		BuildDict, BuildList, BuildSet, BuildTuple,
-		Call,
-		Destruct,
-		
-		Label,
-		Prolog,
-		Epilog
-	)
 
 	template<typename NativeTHead, typename... NativeT>
 	inline auto fill_bytes(uint8_t* ptr, NativeTHead arg0, NativeT... args) {
@@ -99,112 +62,94 @@ namespace yapyjit {
 
 	class Function;
 
-	inline auto raise_ins(local_t local_id) {
-		return bytes(InsnTag::Raise, local_id);
-	}
-	
-	inline auto return_ins(local_t local_id) {
-		return bytes(InsnTag::Return, local_id);
+	BETTER_ENUM(
+		InsnTag, uint8_t,
+		Add,
+		Sub,
+		Mult,
+		MatMult,
+		Div,
+		Mod,
+		Pow,
+		LShift,
+		RShift,
+		BitOr,
+		BitXor,
+		BitAnd,
+		FloorDiv,
+		Invert,
+		Not,
+		UAdd,
+		USub,
+		Eq,
+		NotEq,
+		Lt,
+		LtE,
+		Gt,
+		GtE,
+		Is,
+		IsNot,
+		In,
+		NotIn,
+		CheckErrorType,
+		Constant,
+		DelAttr,
+		DelItem,
+		ErrorProp,
+		ClearErrorCtx,
+		IterNext,
+		Jump,
+		JumpTruthy,
+		LoadAttr,
+		LoadClosure,
+		LoadGlobal,
+		LoadItem,
+		Move,
+		Raise,
+		Return,
+		StoreAttr,
+		StoreClosure,
+		StoreGlobal,
+		StoreItem,
+		SetErrorLabel,
+		BuildDict,
+		BuildList,
+		BuildSet,
+		BuildTuple,
+		Call,
+		Destruct,
+		Prolog,
+		Epilog,
+		TraceHead,
+		HotTraceHead
+	)
+
+	inline auto binop_ins(InsnTag mode, local_t dst, local_t left, local_t right) {
+		return bytes(mode, dst, left, right);
 	}
 
-	inline auto move_ins(local_t dst_local_id, local_t src_local_id) {
-		return bytes(InsnTag::Move, dst_local_id, src_local_id);
+	inline auto unaryop_ins(InsnTag mode, local_t dst, local_t src) {
+		return bytes(mode, dst, src);
 	}
 
-	inline auto binop_ins(InsnTag op, local_t dst_local_id, local_t left_local_id, local_t right_local_id) {
-		return bytes(op, dst_local_id, left_local_id, right_local_id);
+	inline auto compare_ins(InsnTag mode, local_t dst, local_t left, local_t right) {
+		return bytes(mode, dst, left, right);
 	}
 
-	inline auto unaryop_ins(InsnTag op, local_t dst_local_id, local_t src_local_id) {
-		return bytes(op, dst_local_id, src_local_id);
+	inline auto check_error_type_ins(local_t dst, local_t ty, iaddr_t fail_to = L_PLACEHOLDER) {
+		return bytes(InsnTag::CheckErrorType, dst, ty, fail_to);
 	}
 
-	inline auto compare_ins(InsnTag op, local_t dst_local_id, local_t left_local_id, local_t right_local_id) {
-		return bytes(op, dst_local_id, left_local_id, right_local_id);
+	inline auto constant_ins(local_t obj, ManagedPyo const_obj) {
+		return bytes(InsnTag::Constant, obj, const_obj.transfer());
 	}
 
-	inline auto jump_ins(iaddr_t target = L_PLACEHOLDER) {
-		return bytes(InsnTag::Jump, target);
+	inline auto del_attr_ins(local_t obj, const std::string& attrname) {
+		return std::make_tuple(bytes(InsnTag::DelAttr, obj), attrname);
 	}
 
-	inline auto jump_truthy_ins(local_t cond_local_id, iaddr_t target = L_PLACEHOLDER) {
-		return bytes(InsnTag::JumpTruthy, cond_local_id, target);
-	}
-
-	inline auto load_attr_ins(local_t dst_local_id, local_t obj_local_id, const std::string& attrname) {
-		return std::make_tuple(bytes(InsnTag::LoadAttr, dst_local_id, obj_local_id), attrname);
-	}
-
-	inline auto store_attr_ins(local_t obj_local_id, local_t src_local_id, const std::string& attrname) {
-		return std::make_tuple(bytes(InsnTag::StoreAttr, src_local_id, obj_local_id), attrname);
-	}
-
-	inline auto del_attr_ins(local_t obj_local_id, const std::string& attrname) {
-		return std::make_tuple(bytes(InsnTag::DelAttr, obj_local_id), attrname);
-	}
-
-	inline auto load_item_ins(local_t dst_local_id, local_t obj_local_id, local_t subscr_local_id) {
-		return bytes(InsnTag::LoadItem, dst_local_id, obj_local_id, subscr_local_id);
-	}
-
-	inline auto store_item_ins(local_t obj_local_id, local_t src_local_id, local_t subscr_local_id) {
-		return bytes(InsnTag::StoreItem, src_local_id, obj_local_id, subscr_local_id);
-	}
-
-	inline auto del_item_ins(local_t obj_local_id, local_t subscr_local_id) {
-		return bytes(InsnTag::DelItem, obj_local_id, subscr_local_id);
-	}
-
-	inline auto iter_next_ins(local_t dst_local_id, local_t iter_local_id, iaddr_t iter_fail_to = L_PLACEHOLDER) {
-		return bytes(InsnTag::IterNext, dst_local_id, iter_local_id, iter_fail_to);
-	}
-
-	inline auto build_ins(InsnTag mode, local_t dst_local_id, const std::vector<local_t>& args) {
-		if (args.size() > UINT8_MAX) throw std::runtime_error("Build instruction with more than 255 targets.");
-		return std::make_tuple(bytes(mode, dst_local_id, (uint8_t)args.size()), args);
-	}
-
-	inline auto destruct_ins(local_t src_local_id, const std::vector<local_t>& dests) {
-		if (dests.size() > UINT8_MAX) throw std::runtime_error("Destruct instruction with more than 255 targets.");
-		return std::make_tuple(bytes(InsnTag::Destruct, src_local_id, (uint8_t)dests.size()), dests);
-	}
-
-	inline auto constant_ins(local_t dst_local_id, ManagedPyo const_obj) {
-		return bytes(InsnTag::Constant, dst_local_id, const_obj.transfer());
-	}
-
-	inline auto load_global_ins(local_t dst_local_id, const std::string& name) {
-		auto blt = PyEval_GetBuiltins();
-		if (!blt) throw std::logic_error("load_global_ins cannot get builtins.");
-		auto hashee = ManagedPyo(PyUnicode_FromString(name.c_str()));
-		auto bltin_cache_slot = PyDict_GetItem(blt, hashee.borrow());
-		// if (!PyDict_CheckExact(blt)) throw std::logic_error("load_global_ins builtins is not a dict.");
-		return std::make_tuple(bytes(InsnTag::LoadGlobal, dst_local_id, bltin_cache_slot), name);
-	}
-
-	inline auto store_global_ins(local_t src_local_id, const std::string& name) {
-		return std::make_tuple(bytes(InsnTag::StoreGlobal, src_local_id), name);
-	}
-
-	inline auto load_closure_ins(local_t dst_local_id, local_t closure_id) {
-		return bytes(InsnTag::LoadClosure, dst_local_id, closure_id);
-	}
-
-	inline auto store_closure_ins(local_t src_local_id, local_t closure_id) {
-		return bytes(InsnTag::StoreClosure, src_local_id, closure_id);
-	}
-
-	inline auto call_ins(local_t dst_local_id, local_t func_local_id, const std::vector<local_t>& args, const std::map<std::string, local_t>& kwargs) {
-		if (args.size() > UINT8_MAX) throw std::runtime_error("Call instruction with more than 255 args.");
-		if (kwargs.size() > UINT8_MAX) throw std::runtime_error("Call instruction with more than 255 kwargs.");
-		return std::make_tuple(
-			bytes(InsnTag::Call, dst_local_id, func_local_id, (uint8_t)args.size(), (uint8_t)kwargs.size()),
-			args, kwargs
-		);
-	}
-
-	inline auto check_error_type_ins(local_t dst_local_id, local_t ty_local_id, iaddr_t fail_jump_addr = L_PLACEHOLDER) {
-		return bytes(InsnTag::CheckErrorType, dst_local_id, ty_local_id, fail_jump_addr);
+	inline auto del_item_ins(local_t obj, local_t subscr) {
+		return bytes(InsnTag::DelItem, obj, subscr);
 	}
 
 	inline auto error_prop_ins() {
@@ -215,8 +160,84 @@ namespace yapyjit {
 		return bytes(InsnTag::ClearErrorCtx);
 	}
 
-	inline auto set_error_label_ins(iaddr_t addr = L_PLACEHOLDER) {
-		return bytes(InsnTag::SetErrorLabel, addr);
+	inline auto iter_next_ins(local_t dst, local_t iter, iaddr_t iter_fail_to = L_PLACEHOLDER) {
+		return bytes(InsnTag::IterNext, dst, iter, iter_fail_to);
+	}
+
+	inline auto jump_ins(iaddr_t target = L_PLACEHOLDER) {
+		return bytes(InsnTag::Jump, target);
+	}
+
+	inline auto jump_truthy_ins(local_t cond, iaddr_t target = L_PLACEHOLDER) {
+		return bytes(InsnTag::JumpTruthy, cond, target);
+	}
+
+	inline auto load_attr_ins(local_t dst, local_t obj, const std::string& attrname) {
+		return std::make_tuple(bytes(InsnTag::LoadAttr, dst, obj), attrname);
+	}
+
+	inline auto load_closure_ins(local_t dst, local_t closure) {
+		return bytes(InsnTag::LoadClosure, dst, closure);
+	}
+
+	inline auto load_global_ins(local_t dst, const std::string& name) {
+		return std::make_tuple(bytes(InsnTag::LoadGlobal, dst), name);
+	}
+
+	inline auto load_item_ins(local_t dst, local_t obj, local_t subscr) {
+		return bytes(InsnTag::LoadItem, dst, obj, subscr);
+	}
+
+	inline auto move_ins(local_t dst, local_t src) {
+		return bytes(InsnTag::Move, dst, src);
+	}
+
+	inline auto raise_ins(local_t exc) {
+		return bytes(InsnTag::Raise, exc);
+	}
+
+	inline auto return_ins(local_t src) {
+		return bytes(InsnTag::Return, src);
+	}
+
+	inline auto store_attr_ins(local_t obj, local_t src, const std::string& attrname) {
+		return std::make_tuple(bytes(InsnTag::StoreAttr, obj, src), attrname);
+	}
+
+	inline auto store_closure_ins(local_t src, local_t closure) {
+		return bytes(InsnTag::StoreClosure, src, closure);
+	}
+
+	inline auto store_global_ins(local_t src, const std::string& name) {
+		return std::make_tuple(bytes(InsnTag::StoreGlobal, src), name);
+	}
+
+	inline auto store_item_ins(local_t obj, local_t src, local_t subscr) {
+		return bytes(InsnTag::StoreItem, obj, src, subscr);
+	}
+
+	inline auto set_error_label_ins() {
+		return bytes(InsnTag::SetErrorLabel);
+	}
+
+	inline auto build_ins(InsnTag mode, local_t dst, const std::vector<local_t>& args) {
+		if (args.size() > UINT8_MAX)
+			throw std::runtime_error("`build` with more than 255 args.");
+		return std::make_tuple(bytes(mode, dst, (uint8_t)args.size()), args);
+	}
+
+	inline auto call_ins(local_t dst, local_t func, const std::vector<local_t>& args, const std::map<std::string, local_t>& kwargs) {
+		if (args.size() > UINT8_MAX)
+			throw std::runtime_error("`Call` with more than 255 args.");
+		if (kwargs.size() > UINT8_MAX)
+			throw std::runtime_error("`Call` with more than 255 kwargs.");
+		return std::make_tuple(bytes(InsnTag::Call, dst, func, (uint8_t)args.size(), (uint8_t)kwargs.size()), args, kwargs);
+	}
+
+	inline auto destruct_ins(local_t src, const std::vector<local_t>& targets) {
+		if (targets.size() > UINT8_MAX)
+			throw std::runtime_error("`Destruct` with more than 255 targets.");
+		return std::make_tuple(bytes(InsnTag::Destruct, src, (uint8_t)targets.size()), targets);
 	}
 
 	inline auto prolog_ins() {
@@ -225,6 +246,14 @@ namespace yapyjit {
 
 	inline auto epilog_ins() {
 		return bytes(InsnTag::Epilog);
+	}
+
+	inline auto trace_head_ins(uint8_t counter) {
+		return bytes(InsnTag::TraceHead, counter);
+	}
+
+	inline auto hot_trace_head_ins(int64_t ptr) {
+		return bytes(InsnTag::HotTraceHead, ptr);
 	}
 
 	class PBlock {
