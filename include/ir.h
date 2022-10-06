@@ -26,10 +26,8 @@
 #include <mpyo.h>
 #include <mir_wrapper.h>
 
-#define YAPYJIT_IR_COMMON(CLS) \
-	virtual Instruction* deepcopy() { return new CLS(*this); } \
-
 namespace yapyjit {
+	std::string ir_pprint(uint8_t* p);
 
 	template<typename NativeTHead, typename... NativeT>
 	inline auto fill_bytes(uint8_t* ptr, NativeTHead arg0, NativeT... args) {

@@ -200,6 +200,7 @@
   <ItemGroup>
     <ClCompile Include="ast_emit_ir.cpp" />
     <ClCompile Include="ast_py2native.cpp" />
+    <ClCompile Include="ir_pprint.cpp" />
     <ClCompile Include="yapyjit.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -24,6 +24,9 @@
     <ClCompile Include="ast_emit_ir.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ir_pprint.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\enum.h">

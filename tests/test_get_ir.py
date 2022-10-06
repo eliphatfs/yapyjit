@@ -19,7 +19,7 @@ class TestGetIR(unittest.TestCase):
         ir = yapyjit.get_ir(testfun)
         self.assertTrue(b'zero' in ir)
         if print_ir:
-            print(ir)
+            print(yapyjit.pprint_ir(ir))
 
 
 if __name__ == '__main__':

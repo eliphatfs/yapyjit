@@ -9,11 +9,11 @@ using namespace yapyjit;
 
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
 \
-Get IR of python function func. Returns a string.");
+Get IR of python function func. Returns the bytecode as a bytes object.");
 
-PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
+PyObject* yapyjit_ir(PyObject* self, PyObject* args) {
     /* Shared references that do not need Py_DECREF before returning. */
-    PyObject * pyfunc = NULL;
+    PyObject* pyfunc = NULL;
 
     /* Parse positional and keyword arguments */
     if (!PyArg_ParseTuple(args, "O", &pyfunc)) {
@@ -21,11 +21,31 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
     }
 
     auto ir = yapyjit::get_ir(yapyjit::get_py_ast(pyfunc), ManagedPyo(pyfunc, true));
-    
+
     return PyBytes_FromStringAndSize(
         reinterpret_cast<char*>(ir->bytecode().data()),
         ir->bytecode().size()
     );
+}
+
+PyDoc_STRVAR(yapyjit_ir_pprint_doc, "pprint_ir(ir_bytes)\
+\
+Pretty-print IR bytecode. Returns a string.");
+
+PyObject* yapyjit_ir_pprint(PyObject* self, PyObject* args) {
+    PyObject* ir_bytes = NULL;
+
+    /* Parse positional and keyword arguments */
+    if (!PyArg_ParseTuple(args, "O", &ir_bytes)) {
+        return NULL;
+    }
+    if (!PyBytes_Check(ir_bytes)) {
+        throw std::logic_error("ir_bytes should be a bytes object.");
+    }
+
+    auto ir = yapyjit::ir_pprint((uint8_t*)PyBytes_AS_STRING(ir_bytes));
+
+    return PyUnicode_FromString(ir.c_str());
 }
 
 /*
@@ -33,6 +53,7 @@ PyObject * yapyjit_ir(PyObject * self, PyObject * args) {
  */
 static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
+    { "pprint_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir_pprint>(), METH_VARARGS, yapyjit_ir_pprint_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 
