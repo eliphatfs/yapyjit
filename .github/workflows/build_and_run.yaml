@@ -17,6 +17,8 @@ jobs:
         uses: pypa/cibuildwheel@v2.1.2
         env:
           CIBW_ARCHS: auto64
+          CIBW_ENVIRONMENT: CC='clang' CXX='clang++'
+          CIBW_BUILD_VERBOSITY: 1
 
       - uses: actions/upload-artifact@v2
         with:
