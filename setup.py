@@ -13,8 +13,10 @@ cl_args = []
 if platform.system() == 'Windows':
     cc_args += ['/DEBUG', '/Z7', '/std:c++17']
     cl_args += ['/DEBUG']
-else:
+elif platform.system() == 'Linux':
     cc_args += ['-D__FUNCTION__=""', '-std=c++17', '-fno-crossjumping']
+else:
+    cc_args += ['-D__FUNCTION__=""', '-std=c++17']
     # TODO: change all occurrences
 
 
