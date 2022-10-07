@@ -14,7 +14,7 @@ if platform.system() == 'Windows':
     cc_args += ['/DEBUG', '/Z7', '/std:c++17']
     cl_args += ['/DEBUG']
 else:
-    cc_args += ['-D__FUNCTION__=""', '-std=c++17']
+    cc_args += ['-D__FUNCTION__=""', '-std=c++17', '-fno-crossjumping']
     # TODO: change all occurrences
 
 
