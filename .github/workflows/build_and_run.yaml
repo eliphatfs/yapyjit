@@ -19,7 +19,7 @@ jobs:
           CIBW_ARCHS: auto64
           CIBW_ENVIRONMENT: CC='clang' CXX='clang++'
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_BEFORE_BUILD_LINUX: apt install clang-15
+          CIBW_BEFORE_ALL_LINUX: yum install clang-15
 
       - uses: actions/upload-artifact@v2
         with:
