@@ -7,6 +7,8 @@
 #include <exc_helper.h>
 using namespace yapyjit;
 
+PyObject* module_ref;
+
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
 \
 Get IR of python function func. Returns the bytecode as a bytes object.");
@@ -48,26 +50,85 @@ PyObject* yapyjit_ir_pprint(PyObject* self, PyObject* args) {
     return PyUnicode_FromString(ir.c_str());
 }
 
+PyDoc_STRVAR(yapyjit_jit_doc, "jit(obj)\
+\
+Marks a function ready for JIT and yapyjit will take control of the execution of the marked function.");
+
+PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
+    PyObject* thearg = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &thearg)) {
+        return nullptr;
+    }
+    auto jit_entrance_t = ManagedPyo(module_ref, true).attr("JitEntrance");
+    if (thearg) {
+        if (jit_entrance_t == (PyObject*)Py_TYPE(thearg)) {
+            Py_INCREF(thearg);
+            return thearg;
+        }
+        else if (PyObject_IsInstance(thearg, (PyObject*)&PyType_Type)) {
+            auto mncls = ManagedPyo(thearg, true);
+            for (auto attr : ManagedPyo(PyObject_Dir(thearg))) {
+                auto fn = mncls.attr(attr.to_cstr());
+                if (PyFunction_Check(fn.borrow())) {
+                    auto argtuple = PyTuple_New(2);
+                    PyTuple_SET_ITEM(argtuple, 0, fn.transfer());
+                    Py_INCREF(thearg);
+                    PyTuple_SET_ITEM(argtuple, 1, thearg);
+                    auto obj = PyObject_Call(jit_entrance_t.borrow(), argtuple, nullptr);
+                    if (!obj) {
+                        PyErr_Clear();  // TODO: warning flags
+                        continue;
+                    }
+                    mncls.attr(
+                        attr.to_cstr(), obj
+                    );
+                    Py_DECREF(argtuple);
+                }
+            }
+            Py_INCREF(thearg);
+            return thearg;
+        }
+        else {
+            auto argtuple = PyTuple_New(2);
+            Py_INCREF(thearg);
+            PyTuple_SET_ITEM(argtuple, 0, thearg);
+            Py_INCREF(Py_None);
+            PyTuple_SET_ITEM(argtuple, 1, Py_None);
+            auto result = PyObject_Call(jit_entrance_t.borrow(), argtuple, nullptr);
+            Py_DECREF(argtuple);
+            return result;
+        }
+    }
+    else
+        return nullptr;
+}
+
 /*
  * List of functions to add to yapyjit in exec_yapyjit().
  */
 static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
     { "pprint_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir_pprint>(), METH_VARARGS, yapyjit_ir_pprint_doc },
+    { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 
+extern int init_jit_entrance(PyObject* m);
 /*
  * Initialize yapyjit. May be called multiple times, so avoid
  * using static state.
  */
 int exec_yapyjit(PyObject *module) {
+    module_ref = module;
     PyModule_AddFunctions(module, yapyjit_functions);
 
     PyModule_AddStringConstant(module, "__author__", "flandre.info");
     PyModule_AddStringConstant(module, "__version__", "0.0.1a1");
     PyModule_AddIntConstant(module, "year", 2022);
 
+    if (init_jit_entrance(module)) {
+        return -1;
+    }
     return 0; /* success */
 }
 

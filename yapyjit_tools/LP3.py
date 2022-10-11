@@ -106,7 +106,6 @@ specs = [
     "StoreClosure", [local('src'), local('closure')],
     "StoreGlobal", [local('src'), cstr('name')],
     "StoreItem", [local('obj'), local('src'), local('subscr')],
-    "SetErrorLabel", [],
     Group('Build', [
         "BuildDict", [],
         "BuildList", [],

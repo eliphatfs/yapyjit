@@ -1,4 +1,5 @@
 #include <pyast.h>
+#include <iostream>
 
 namespace yapyjit {
 
@@ -13,7 +14,7 @@ namespace yapyjit {
 
 	class ErrorHandleBlock : public PBlock {
 	public:
-		std::vector<ilabel_t> err_starts;
+		std::vector<size_t> err_starts;
 		std::vector<AST*> finalbody;
 		virtual void emit_exit(Function& appender) {
 			for (auto astptr : finalbody) {
@@ -317,12 +318,18 @@ namespace yapyjit {
 			err_blk.finalbody.push_back(stmt.get());
 
 		appender.pblocks.push_back(&err_blk);
-		auto label_err = appender.add_insn_label(set_error_label_ins());
+
+		appender.exctable_key.push_back(appender.next_addr());
+		auto label_err = appender.exctable_val.size();
+		appender.exctable_val.push_back(L_PLACEHOLDER);
+
 		for (auto& stmt : body)
 			stmt->emit_ir(appender);
 		appender.pblocks.pop_back();
 
-		auto old_label_errp = appender.add_insn_label(set_error_label_ins());
+		appender.exctable_key.push_back(appender.next_addr());
+		auto old_label_errp = appender.exctable_val.size();
+		appender.exctable_val.push_back(L_PLACEHOLDER);
 
 		for (auto it = appender.pblocks.rbegin(); it != appender.pblocks.rend(); it++) {
 			auto old_err_blk = dynamic_cast<ErrorHandleBlock*>(*it);
@@ -335,9 +342,9 @@ namespace yapyjit {
 		for (auto& stmt : orelse)
 			stmt->emit_ir(appender);
 		label_blk_next.push_back(appender.add_insn_label(jump_ins()));
-		*label_err = appender.next_addr();
-		for (auto& ptr : err_blk.err_starts) {
-			*ptr = *label_err;
+		appender.exctable_val[label_err] = appender.next_addr();
+		for (auto ptr : err_blk.err_starts) {
+			appender.exctable_val[ptr] = appender.next_addr();
 		}
 		// Start error handlers
 		for (auto& handler : handlers) {
@@ -411,6 +418,13 @@ namespace yapyjit {
 		);
 		ret_none_default.emit_ir(*appender);
 		appender->add_insn(epilog_ins());
+
+		/*std::cout << appender->name << " exctable:" << std::endl;
+		for (auto i = 0; i < appender->exctable_key.size(); i++)
+		{
+			std::cout << appender->exctable_key[i] << ' ' << appender->exctable_val[i] << std::endl;
+		}
+		std::cout << std::endl;*/
 
 		return appender;
 	}

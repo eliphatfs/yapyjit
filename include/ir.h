@@ -109,7 +109,6 @@ namespace yapyjit {
 		StoreClosure,
 		StoreGlobal,
 		StoreItem,
-		SetErrorLabel,
 		BuildDict,
 		BuildList,
 		BuildSet,
@@ -214,10 +213,6 @@ namespace yapyjit {
 		return bytes(InsnTag::StoreItem, obj, src, subscr);
 	}
 
-	inline auto set_error_label_ins() {
-		return bytes(InsnTag::SetErrorLabel);
-	}
-
 	inline auto build_ins(InsnTag mode, local_t dst, const std::vector<local_t>& args) {
 		if (args.size() > UINT8_MAX)
 			throw std::runtime_error("`build` with more than 255 args.");
@@ -316,12 +311,17 @@ namespace yapyjit {
 		std::map<std::string, local_t> closure;  // ID is deref ns index
 		std::set<std::string> globals;
 		std::vector<PBlock*> pblocks;
+		std::vector<iaddr_t> exctable_key;
+		std::vector<iaddr_t> exctable_val;
 		int nargs;
 
 		std::vector<uint8_t>& bytecode() { return bytecode_serializer.buffer; }
 
 		Function(ManagedPyo globals_ns_, ManagedPyo deref_ns_, std::string name_, int nargs_) :
-			globals_ns(globals_ns_), deref_ns(deref_ns_), name(name_), nargs(nargs_) {}
+			globals_ns(globals_ns_), deref_ns(deref_ns_), name(name_), nargs(nargs_) {
+			exctable_key.push_back(0);
+			exctable_val.push_back(L_PLACEHOLDER);
+		}
 
 		// Get address of the next instruction.
 		iaddr_t next_addr() { return static_cast<iaddr_t>(bytecode().size()); }
