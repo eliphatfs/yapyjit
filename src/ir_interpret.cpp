@@ -1,4 +1,5 @@
 #include <vector>
+#include <iostream>
 #include <algorithm>
 #include <exc_helper.h>
 #include <ir.h>
@@ -929,6 +930,10 @@ namespace yapyjit {
                 }
             }
             LP3_FETCH();
+            /*PyObject_Print(locals[func], stdout, 0);
+            std::cout << ' ';
+            PyObject_Print(argv, stdout, 0);
+            std::cout << std::endl;*/
             if (!write_ref(locals, dst, PyObject_Call(locals[func], argv, kwargv)))
             {
                 Py_DECREF(argv); Py_XDECREF(kwargv);

@@ -136,9 +136,10 @@ namespace yapyjit {
 		}
 		else if (ins_pair.second) {
 			// Not exist, assume global
-			appender.add_insn(load_global_ins(ins_pair.first->second, identifier));
 			appender.globals.insert(identifier);
 		}
+		if (appender.globals.count(identifier))
+			appender.add_insn(load_global_ins(ins_pair.first->second, identifier));
 		return ins_pair.first->second;
 	}
 	local_t Attribute::emit_ir(Function& appender) {

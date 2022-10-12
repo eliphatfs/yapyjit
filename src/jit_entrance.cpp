@@ -141,7 +141,8 @@ wf_fastcall(JitEntrance* self, PyObject* const* args, size_t nargsf, PyObject* k
         locals[i + 1] = self->defaults->at(i);
         Py_XINCREF(locals[i + 1]);
     }
-    Py_REFCNT(Py_None) += self->compiled->locals.size() - nargs;
+    // FIXME: any other ways without relying on should-be-opaque ABI?
+    Py_None->ob_refcnt += self->compiled->locals.size() - nargs;
     for (Py_ssize_t i = nargs; i < self->compiled->locals.size(); i++)
         locals[i + 1] = Py_None;
 
