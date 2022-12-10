@@ -1,8 +1,5 @@
 #include <yapyjit.h>
 #include "structmember.h"
-namespace yapyjit {
-    extern PyObject* ir_interpret(uint8_t* p, std::vector<PyObject*> locals, Function& func);
-}
 
 typedef struct {
     PyObject_HEAD

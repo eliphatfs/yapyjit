@@ -27,7 +27,9 @@
 #include <mir_wrapper.h>
 
 namespace yapyjit {
+	class Function;
 	std::string ir_pprint(uint8_t* p);
+    PyObject* ir_interpret(uint8_t* p, std::vector<PyObject*> locals, Function& func);
 
 	template<typename NativeTHead, typename... NativeT>
 	inline auto fill_bytes(uint8_t* ptr, NativeTHead arg0, NativeT... args) {
