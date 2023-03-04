@@ -29,7 +29,7 @@ namespace yapyjit {
 			ManagedPyo mm(PyMemoryView_FromMemory(
 				reinterpret_cast<char*>(p), func.bytecode().size() - (p - func.bytecode().data()), PyBUF_READ
 		    ));
-			pyo.call(tag, mm);
+			pyo.call(tag.borrow(), mm.borrow());
 		}
 	};
 }
