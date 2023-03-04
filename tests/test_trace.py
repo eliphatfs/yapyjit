@@ -4,7 +4,7 @@ import yapyjit
 from yapyjit_tools import LP3
 
 
-print = lambda x: x
+print = lambda *x: x
 
 
 @yapyjit.jit
