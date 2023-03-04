@@ -125,3 +125,4 @@ insn_specs = [
         if isinstance(x, Group) else [x]
     )
 ]
+insn_names = insn_specs[::2]
