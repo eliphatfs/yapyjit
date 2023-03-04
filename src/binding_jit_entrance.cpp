@@ -152,8 +152,10 @@ wf_fastcall(JitEntrance* self, PyObject* const* args, size_t nargsf, PyObject* k
             Py_INCREF(slot);
         }
     }
-    auto result = yapyjit::ir_interpret(self->compiled->bytecode().data(), locals, *self->compiled);
-    return result;
+    if (!yapyjit::force_trace_p)
+        return yapyjit::ir_interpret(self->compiled->bytecode().data(), locals, *self->compiled);
+    else
+        return yapyjit::ir_trace(self->compiled->bytecode().data(), locals, *self->compiled);
 }
 
 

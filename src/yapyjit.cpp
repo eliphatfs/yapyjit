@@ -8,6 +8,7 @@
 using namespace yapyjit;
 
 PyObject* module_ref;
+bool yapyjit::force_trace_p = false;
 
 PyDoc_STRVAR(yapyjit_get_ir_doc, "get_ir(func)\
 \
@@ -141,6 +142,23 @@ PyObject* yapyjit_remove_tracer(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(yapyjit_set_force_trace_doc, "set_force_trace(flag)\
+\
+Whether to enable trace outside tracing phase of interpreter.");
+
+PyObject* yapyjit_set_force_trace(PyObject* self, PyObject* args) {
+    /* Shared references that do not need Py_DECREF before returning. */
+    int i = 0;
+
+    /* Parse positional and keyword arguments */
+    if (!PyArg_ParseTuple(args, "p", &i)) {
+        return NULL;
+    }
+
+    yapyjit::force_trace_p = i > 0;
+    Py_RETURN_NONE;
+}
+
 /*
  * List of functions to add to yapyjit in exec_yapyjit().
  */
@@ -150,6 +168,7 @@ static PyMethodDef yapyjit_functions[] = {
     { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
     { "add_tracer", (PyCFunction)yapyjit::guarded<yapyjit_add_tracer>(), METH_VARARGS, yapyjit_add_tracer_doc },
     { "remove_tracer", (PyCFunction)yapyjit::guarded<yapyjit_remove_tracer>(), METH_VARARGS, yapyjit_remove_tracer_doc },
+    { "set_force_trace", (PyCFunction)yapyjit::guarded<yapyjit_set_force_trace>(), METH_VARARGS, yapyjit_set_force_trace_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 

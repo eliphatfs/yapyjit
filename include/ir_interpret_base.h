@@ -140,6 +140,7 @@ namespace yapyjit {
             if (err_pc == L_PLACEHOLDER)
             {
                 ret = nullptr;
+                next_insn_tag = InsnTag::Epilog;
                 goto Epilog;
             }
             else
@@ -792,6 +793,7 @@ namespace yapyjit {
             COMMON_ARG(src);
             ret = locals[src];
             COMMON_EXEC;
+            next_insn_tag = InsnTag::Epilog;
             goto Epilog;
         }
         StoreAttr: {
