@@ -16,20 +16,26 @@ namespace yapyjit {
 			ir_trace_chain.erase(chain_place);
 			chain_place = ir_trace_chain.end();
 		}
-		virtual void trace(uint8_t insn_tag, uint8_t* p, Function& func) = 0;
+		virtual void trace(uint8_t insn_tag, uint8_t* p, Function& func, std::vector<PyObject*>& locals) = 0;
 		virtual ~Tracer() = default;
 	};
 	class PythonTracer : public Tracer {
 	public:
 		ManagedPyo pyo;
 		PythonTracer(const ManagedPyo& callable) : Tracer(), pyo(callable) {}
-		virtual void trace(uint8_t insn_tag, uint8_t* p, Function& func)
+		virtual void trace(uint8_t insn_tag, uint8_t* p, Function& func, std::vector<PyObject*>& locals)
 		{
 			ManagedPyo tag(PyLong_FromLong(insn_tag));
 			ManagedPyo mm(PyMemoryView_FromMemory(
 				reinterpret_cast<char*>(p), func.bytecode().size() - (p - func.bytecode().data()), PyBUF_READ
 		    ));
-			pyo.call(tag.borrow(), mm.borrow());
+			PyListObject stack;
+			stack.ob_base.ob_base.ob_refcnt = 1;
+			stack.ob_base.ob_base.ob_type = &PyList_Type;
+			stack.ob_base.ob_size = locals.size();
+			stack.allocated = locals.capacity();
+			stack.ob_item = locals.data();
+			pyo.call(tag.borrow(), mm.borrow(), &stack);
 		}
 	};
 }

@@ -77,7 +77,7 @@
     if constexpr (traced) \
     { \
         for (auto tracer : ir_trace_chain) \
-            tracer->trace(next_insn_tag, p, func); \
+            tracer->trace(next_insn_tag, p, func, locals); \
     } \
 } while (0)
 
