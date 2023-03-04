@@ -4,6 +4,8 @@
 #include <Python.h>
 #include <mpyo.h>
 #include <pyast.h>
+#include <ir.h>
+#include <ir_interpret_trace.h>
 
 static_assert(sizeof(Py_ssize_t) == 8, "Only 64 bit machines are supported");
 

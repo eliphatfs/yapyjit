@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <exc_helper.h>
 #include <ir.h>
+#include <ir_interpret_trace.h>
 
 #define READ(t) (*(t*)p); p += sizeof(t)
 #define LOCAL() READ(local_t)
@@ -73,6 +74,11 @@
 } while (0)
 
 #define COMMON_DECODE do { \
+    if constexpr (traced) \
+    { \
+        for (auto tracer : ir_trace_chain) \
+            tracer->trace(next_insn_tag, p, func); \
+    } \
 } while (0)
 
 #define COMMON_EXEC do { \

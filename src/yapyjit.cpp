@@ -103,6 +103,44 @@ PyObject* yapyjit_jit(PyObject* self, PyObject* args) {
         return nullptr;
 }
 
+PyDoc_STRVAR(yapyjit_add_tracer_doc, "add_tracer(func)\
+\
+Add tracer to the chain that receives arguments (insn_tag, ir_memory_view).\
+Returns handle that can be used in `remove_tracer`.");
+
+PyObject* yapyjit_add_tracer(PyObject* self, PyObject* args) {
+    /* Shared references that do not need Py_DECREF before returning. */
+    PyObject* pyfunc = NULL;
+
+    /* Parse positional and keyword arguments */
+    if (!PyArg_ParseTuple(args, "O", &pyfunc)) {
+        return NULL;
+    }
+
+    auto tracer = new PythonTracer(ManagedPyo(pyfunc, true));
+    tracer->add_to_chain();
+    return PyLong_FromVoidPtr(tracer);
+}
+
+PyDoc_STRVAR(yapyjit_remove_tracer_doc, "remove_tracer(handle)\
+\
+Remove a tracer function from the interpreter trace chain.");
+
+PyObject* yapyjit_remove_tracer(PyObject* self, PyObject* args) {
+    /* Shared references that do not need Py_DECREF before returning. */
+    PyObject* i = NULL;
+
+    /* Parse positional and keyword arguments */
+    if (!PyArg_ParseTuple(args, "O", &i)) {
+        return NULL;
+    }
+    
+    PythonTracer* tracer = (PythonTracer*)PyLong_AsVoidPtr(i);
+    tracer->remove_from_chain();
+    delete tracer;
+    Py_RETURN_NONE;
+}
+
 /*
  * List of functions to add to yapyjit in exec_yapyjit().
  */
@@ -110,6 +148,8 @@ static PyMethodDef yapyjit_functions[] = {
     { "get_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir>(), METH_VARARGS, yapyjit_get_ir_doc },
     { "pprint_ir", (PyCFunction)yapyjit::guarded<yapyjit_ir_pprint>(), METH_VARARGS, yapyjit_ir_pprint_doc },
     { "jit", (PyCFunction)yapyjit::guarded<yapyjit_jit>(), METH_VARARGS, yapyjit_jit_doc },
+    { "add_tracer", (PyCFunction)yapyjit::guarded<yapyjit_add_tracer>(), METH_VARARGS, yapyjit_add_tracer_doc },
+    { "remove_tracer", (PyCFunction)yapyjit::guarded<yapyjit_remove_tracer>(), METH_VARARGS, yapyjit_remove_tracer_doc },
     { NULL, NULL, 0, NULL } /* marks end of array */
 };
 

@@ -202,13 +202,15 @@
     <ClCompile Include="ast_py2native.cpp" />
     <ClCompile Include="ir_interpret.cpp" />
     <ClCompile Include="ir_pprint.cpp" />
-    <ClCompile Include="jit_entrance.cpp" />
+    <ClCompile Include="binding_jit_entrance.cpp" />
     <ClCompile Include="yapyjit.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\exc_helper.h" />
     <ClInclude Include="..\include\gen_common.h" />
     <ClInclude Include="..\include\gen_icache.h" />
+    <ClInclude Include="..\include\ir_interpret_base.h" />
+    <ClInclude Include="..\include\ir_interpret_trace.h" />
     <ClInclude Include="..\include\mir_wrapper.h" />
     <ClInclude Include="..\include\mpyo.h" />
     <ClInclude Include="..\include\pyast.h" />
